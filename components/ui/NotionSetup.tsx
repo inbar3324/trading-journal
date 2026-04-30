@@ -4,42 +4,37 @@ import { useState } from 'react';
 import { TrendingUp, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
 import { saveNotionConfig, type NotionConfig } from '@/lib/notion-config';
 
+const DEFAULT_DB_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
+
 interface Props {
   onSave: (cfg: NotionConfig) => void;
 }
 
 export default function NotionSetup({ onSave }: Props) {
-  const [key, setKey]       = useState('');
-  const [dbId, setDbId]     = useState('');
-  const [showKey, setShowKey] = useState(false);
+  const [key, setKey]           = useState('');
+  const [showKey, setShowKey]   = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [error, setError]   = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
   async function handleSave() {
     const k = key.trim();
-    const d = dbId.trim().replace(/-/g, '').replace(
-      /^([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{12})$/i,
-      '$1-$2-$3-$4-$5'
-    ) || dbId.trim();
-
     if (!k) { setError('הכנס Notion Integration Token'); return; }
-    if (!d) { setError('הכנס Database ID'); return; }
 
     setLoading(true);
     setError('');
 
     try {
       const res = await fetch('/api/trades', {
-        headers: { 'x-notion-key': k, 'x-notion-db': d },
+        headers: { 'x-notion-key': k, 'x-notion-db': DEFAULT_DB_ID },
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const cfg = { key: k, dbId: d };
+      const cfg = { key: k, dbId: DEFAULT_DB_ID };
       saveNotionConfig(cfg);
       onSave(cfg);
     } catch {
-      setError('לא ניתן להתחבר — בדוק שהמפתח והID נכונים ושחיברת את ה-Integration למסד הנתונים');
+      setError('לא ניתן להתחבר — בדוק שהטוקן נכון ושחיברת את ה-Integration למסד הנתונים');
     } finally {
       setLoading(false);
     }
@@ -73,7 +68,7 @@ export default function NotionSetup({ onSave }: Props) {
             חבר את ה-Notion שלך
           </div>
           <div className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-            הכנס את הפרטים כדי לטעון את הנתונים שלך
+            הכנס את ה-Integration Token כדי לטעון את הנתונים שלך
           </div>
         </div>
 
@@ -87,6 +82,7 @@ export default function NotionSetup({ onSave }: Props) {
               type={showKey ? 'text' : 'password'}
               value={key}
               onChange={(e) => setKey(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
               placeholder="ntn_..."
               className="w-full px-3 py-2.5 rounded-lg text-sm pr-10 outline-none"
               style={{
@@ -106,25 +102,6 @@ export default function NotionSetup({ onSave }: Props) {
           </div>
         </div>
 
-        {/* DB ID input */}
-        <div className="space-y-2">
-          <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            Database ID
-          </label>
-          <input
-            type="text"
-            value={dbId}
-            onChange={(e) => setDbId(e.target.value)}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-primary)',
-            }}
-          />
-        </div>
-
         {/* Help */}
         <div>
           <button
@@ -133,7 +110,7 @@ export default function NotionSetup({ onSave }: Props) {
             style={{ color: 'var(--blue)' }}
           >
             {showHelp ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            כיצד מקבלים את הפרטים?
+            איך מקבלים Integration Token?
           </button>
           {showHelp && (
             <div
@@ -141,20 +118,16 @@ export default function NotionSetup({ onSave }: Props) {
               style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', lineHeight: 1.7 }}
             >
               <div>
-                <strong style={{ color: 'var(--text-primary)' }}>Integration Token:</strong>
-                <br />
-                כנס ל-notion.com/profile/integrations ← &quot;New integration&quot; ← העתק את ה-Token
+                1. כנס ל-notion.com/profile/integrations
               </div>
               <div>
-                <strong style={{ color: 'var(--text-primary)' }}>Database ID:</strong>
-                <br />
-                פתח את מסד הנתונים ב-Notion ← העתק את ה-URL.
-                ה-ID הוא 32 התווים שמופיעים אחרי שם המשתמש ולפני &quot;?&quot;
+                2. לחץ &quot;New integration&quot; ← תן שם ← לחץ Save
               </div>
               <div>
-                <strong style={{ color: 'var(--text-primary)' }}>חשוב:</strong>
-                <br />
-                כנס למסד הנתונים → לחץ &quot;...&quot; → &quot;Connections&quot; → הוסף את ה-Integration שיצרת
+                3. העתק את ה-&quot;Internal Integration Secret&quot;
+              </div>
+              <div>
+                4. פתח את מסד הנתונים ב-Notion ← לחץ &quot;...&quot; ← &quot;Connections&quot; ← הוסף את ה-Integration
               </div>
             </div>
           )}
