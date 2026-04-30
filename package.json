@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "deploy": "git add -A && git commit -m \"update\" && git push"
+    "deploy": "git add -A && git commit -m \"update\" && git push",
+    "watch": "node auto-deploy.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
