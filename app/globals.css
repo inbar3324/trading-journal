@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+:root {
+  /* ── Backgrounds ── neutral charcoal, zero blue tint ── */
+  --bg-primary: #131316;
+  --bg-card: #1C1C22;
+  --bg-surface: #23232C;
+  --bg-elevated: #2A2A35;
+
+  /* ── Borders ── */
+  --border-color: #2E2E3C;
+  --border-hover: #3C3C50;
+
+  /* ── Text ── */
+  --text-primary: #EAECF0;
+  --text-secondary: #8B8D9E;
+  --text-muted: #52546A;
+
+  /* ── Semantic Colors ── */
+  --green: #10B981;
+  --red: #F43F5E;
+  --blue: #3B82F6;
+  --purple: #7C3AED;
+  --yellow: #F59E0B;
+  --teal: #0EA5E9;
+
+  /* ── Accent helpers ── */
+  --accent-dim: rgba(59, 130, 246, 0.10);
+  --accent-border: rgba(59, 130, 246, 0.28);
+
+  /* ── Tier system ── no glows ── */
+  --tier-strong: #10B981;
+  --tier-strong-bg: rgba(16, 185, 129, 0.08);
+  --tier-strong-border: rgba(16, 185, 129, 0.22);
+  --tier-strong-glow: none;
+
+  --tier-avg: #F59E0B;
+  --tier-avg-bg: rgba(245, 158, 11, 0.08);
+  --tier-avg-border: rgba(245, 158, 11, 0.22);
+
+  --tier-weak: #F43F5E;
+  --tier-weak-bg: rgba(244, 63, 94, 0.08);
+  --tier-weak-border: rgba(244, 63, 94, 0.22);
+  --tier-weak-glow: none;
+
+  --tier-muted: #52546A;
+  --tier-muted-bg: rgba(82, 84, 106, 0.10);
+  --tier-muted-border: rgba(82, 84, 106, 0.25);
+
+  /* ── Dim fills ── */
+  --green-dim: rgba(16, 185, 129, 0.10);
+  --red-dim: rgba(244, 63, 94, 0.10);
+  --blue-dim: rgba(59, 130, 246, 0.10);
+  --purple-dim: rgba(124, 58, 237, 0.10);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
