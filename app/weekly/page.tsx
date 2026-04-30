@@ -463,12 +463,22 @@ export default function WeeklyPage() {
               </div>
             )}
 
+            {summaryLoading && !summary && (
+              <div className="flex flex-col items-center justify-center py-10 gap-3">
+                <div
+                  className="w-6 h-6 border-2 rounded-full animate-spin"
+                  style={{ borderColor: 'var(--border-hover)', borderTopColor: 'var(--purple)' }}
+                />
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Gemini מנתח...</div>
+              </div>
+            )}
+
             {summary && <SummaryRenderer text={summary} />}
 
             {!summary && !summaryLoading && !summaryError && (
               <div className="text-sm text-center py-8 rounded-lg"
                 style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>
-                לחץ על &ldquo;צור סיכום&rdquo; לקבלת ניתוח של התקופה
+                לחץ על &ldquo;Generate&rdquo; לקבלת ניתוח של התקופה
               </div>
             )}
           </div>
