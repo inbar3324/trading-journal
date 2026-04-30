@@ -185,7 +185,7 @@ ${analyticsBlock}
 הפתרון נגזר ישירות מהבעיה שזיהית — לא מידע כללי. שאל את עצמך: מה השינוי ההתנהגותי המינימלי שחותך את שורש הבעיה? תן פעולה אחת, ספציפית, שאפשר לבצע כבר בסשן הבא. הפתרון חייב להיות מחובר לבעיה שמצאת — אם הבעיה שונה, הפתרון שונה.`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
