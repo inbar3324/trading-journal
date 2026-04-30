@@ -12,16 +12,17 @@ function multiSelect(prop: unknown): string[] {
   return Array.isArray(items) ? items.map((o) => o.name) : [];
 }
 
-function filesFirstUrl(prop: unknown): string | null {
-  if (!prop || typeof prop !== 'object') return null;
+function filesAllUrls(prop: unknown): string[] {
+  if (!prop || typeof prop !== 'object') return [];
   const p = prop as Record<string, unknown>;
-  if (p.type !== 'files') return null;
+  if (p.type !== 'files') return [];
   const files = p.files as Array<Record<string, unknown>>;
-  if (!Array.isArray(files) || files.length === 0) return null;
-  const first = files[0];
-  if (first.type === 'file') return ((first.file as Record<string, unknown>)?.url as string) ?? null;
-  if (first.type === 'external') return ((first.external as Record<string, unknown>)?.url as string) ?? null;
-  return null;
+  if (!Array.isArray(files)) return [];
+  return files.flatMap(f => {
+    if (f.type === 'file') return [(f.file as Record<string, unknown>)?.url as string].filter(Boolean);
+    if (f.type === 'external') return [(f.external as Record<string, unknown>)?.url as string].filter(Boolean);
+    return [];
+  });
 }
 
 function richTextContent(prop: unknown): string {
@@ -45,11 +46,12 @@ function parseTrade(page: Record<string, unknown>): Trade {
   const coverUrl = ((cover?.external as Record<string, unknown>)?.url as string)
     ?? ((cover?.file as Record<string, unknown>)?.url as string)
     ?? null;
-  const images: string[] = [];
-  if (coverUrl) images.push(coverUrl);
-  for (const val of Object.values(p)) {
-    const url = filesFirstUrl(val);
-    if (url && !images.includes(url)) images.push(url);
+  const images: { url: string; label: string }[] = [];
+  if (coverUrl) images.push({ url: coverUrl, label: 'cover' });
+  for (const [key, val] of Object.entries(p)) {
+    for (const url of filesAllUrls(val)) {
+      if (!images.some(i => i.url === url)) images.push({ url, label: key });
+    }
   }
 
   return {

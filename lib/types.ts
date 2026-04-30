@@ -21,7 +21,7 @@ export interface Trade {
   notes: string;
   tradeIdeaLink: string | null;
   oneMTradeLink: string | null;
-  images: string[];
+  images: { url: string; label: string }[];
 }
 
 export interface GroupStat {

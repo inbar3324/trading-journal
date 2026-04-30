@@ -384,12 +384,12 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
 
       {/* Detail panel */}
       {selectedDate && selectedDay && (
-        <div className="px-5 pb-5 space-y-3" style={{ borderTop: '1px solid var(--border-color)' }}>
-          <div className="pt-4 flex items-center gap-3">
-            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+        <div className="px-6 pb-6 space-y-4" style={{ borderTop: '1px solid var(--border-color)' }}>
+          <div className="pt-5 flex items-center gap-3">
+            <span className="text-sm font-bold uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>
               {selectedDate}
             </span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{
+            <span className="text-xs font-bold px-2.5 py-1 rounded-md" style={{
               background: `color-mix(in srgb, ${dayColor(selectedDay)} 15%, transparent)`,
               color: dayColor(selectedDay),
               border: `1px solid color-mix(in srgb, ${dayColor(selectedDay)} 25%, transparent)`,
@@ -399,13 +399,7 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
           </div>
           {selectedDay.isTrade
             ? selectedDay.entries.filter(t => t.tookTrade.includes('TOOK TRADE')).map(t => <TradeDetailCard key={t.id} trade={t} />)
-            : selectedDay.entries.map(t => t.notes?.trim() ? (
-                <div key={t.id} className="rounded-xl p-4" style={{ background: 'var(--bg-surface)', border: '1px solid color-mix(in srgb, var(--blue) 20%, var(--border-color))' }}>
-                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)', borderLeft: '2px solid var(--blue)', paddingLeft: 10 }}>
-                    {t.notes}
-                  </p>
-                </div>
-              ) : null)
+            : <NoTradeDayPanel entries={selectedDay.entries} />
           }
         </div>
       )}
@@ -436,204 +430,461 @@ function TradeDetailCard({ trade: t }: { trade: Trade }) {
   const isLoss = t.winLose.includes('lose');
   const resultColor = isWin ? 'var(--green)' : isLoss ? 'var(--red)' : 'var(--blue)';
   const ratingColor = t.rateTrade[0]?.startsWith('A') ? 'var(--green)' : t.rateTrade[0]?.startsWith('B') ? 'var(--yellow)' : 'var(--red)';
-  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
 
-  const closeOnBackdrop = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) setLightboxIdx(null);
+  const grouped = t.images.reduce<Record<string, string[]>>((acc, { url, label }) => {
+    (acc[label] ??= []).push(url);
+    return acc;
+  }, {});
+  const groupEntries = Object.entries(grouped);
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number; label: string } | null>(null);
+
+  const toggle = useCallback((label: string) =>
+    setExpanded(prev => ({ ...prev, [label]: !prev[label] })), []);
+
+  const closeLightbox = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) setLightbox(null);
   }, []);
 
   useEffect(() => {
-    if (lightboxIdx === null) return;
+    if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxIdx(null);
-      if (e.key === 'ArrowRight') setLightboxIdx(i => i !== null ? Math.min(i + 1, t.images.length - 1) : null);
-      if (e.key === 'ArrowLeft')  setLightboxIdx(i => i !== null ? Math.max(i - 1, 0) : null);
+      if (e.key === 'Escape')     setLightbox(null);
+      if (e.key === 'ArrowRight') setLightbox(l => l ? { ...l, idx: Math.min(l.idx + 1, l.urls.length - 1) } : null);
+      if (e.key === 'ArrowLeft')  setLightbox(l => l ? { ...l, idx: Math.max(l.idx - 1, 0) } : null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lightboxIdx, t.images.length]);
+  }, [lightbox]);
 
   return (
     <>
-      <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--bg-surface)', border: `1px solid color-mix(in srgb, ${resultColor} 20%, var(--border-color))` }}>
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: `1px solid color-mix(in srgb, ${resultColor} 20%, var(--border-color))` }}>
+
         {/* Header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {t.winLose[0] && <Badge label={t.winLose[0].toUpperCase()} color={resultColor} />}
-            {t.rateTrade[0] && <Badge label={t.rateTrade[0]} color={ratingColor} />}
-            {t.indices.map(i => <Badge key={i} label={i} color="var(--blue)" />)}
-            {t.longShort.map(d => <Badge key={d} label={d.toUpperCase()} color={d === 'long' ? 'var(--green)' : 'var(--red)'} />)}
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Image thumbnails */}
-            {t.images.map((url, idx) => (
-              <button
-                key={idx}
-                onClick={() => setLightboxIdx(idx)}
-                className="rounded-lg overflow-hidden transition-all hover:opacity-80 hover:scale-105"
-                style={{ width: 48, height: 36, border: `1px solid color-mix(in srgb, ${resultColor} 30%, var(--border-color))`, cursor: 'zoom-in', flexShrink: 0 }}
-                aria-label={`תמונה ${idx + 1}`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`chart ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              </button>
-            ))}
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              {t.winLose[0] && <Badge label={t.winLose[0].toUpperCase()} color={resultColor} />}
+              {t.rateTrade[0] && <Badge label={t.rateTrade[0]} color={ratingColor} />}
+              {t.indices.map(i => <Badge key={i} label={i} color="var(--blue)" />)}
+              {t.longShort.map(d => <Badge key={d} label={d.toUpperCase()} color={d === 'long' ? 'var(--green)' : 'var(--red)'} />)}
+            </div>
             {t.pnl !== null && (
-              <span className="text-lg font-bold tabular" style={{ color: resultColor }}>
+              <span className="text-lg font-bold tabular flex-shrink-0" style={{ color: resultColor }}>
                 {t.pnl >= 0 ? '+' : ''}${t.pnl}
               </span>
             )}
           </div>
-        </div>
 
-        {/* Fields grid */}
-        <div className="space-y-2">
-          {t.poi.length > 0 && (
-            <FieldRow label="POI">
-              {t.poi.map(v => <Badge key={v} label={v} color="var(--purple)" />)}
-            </FieldRow>
-          )}
-          {t.rulesFeelings.length > 0 && (
-            <FieldRow label="Feelings">
-              {t.rulesFeelings.map(v => <Badge key={v} label={v} color="var(--teal)" />)}
-            </FieldRow>
-          )}
-          {t.trend.length > 0 && (
-            <FieldRow label="Trend">
-              {t.trend.map(v => <Badge key={v} label={v} color="var(--text-secondary)" />)}
-            </FieldRow>
-          )}
-          {t.biasForTheDay.length > 0 && (
-            <FieldRow label="Bias">
-              {t.biasForTheDay.map(v => <Badge key={v} label={v} color="var(--yellow)" />)}
-            </FieldRow>
-          )}
-          {t.drawInLiquidity.length > 0 && (
-            <FieldRow label="Draw">
-              {t.drawInLiquidity.map(v => <Badge key={v} label={v} color="var(--blue)" />)}
-            </FieldRow>
-          )}
-          {t.reversalContinuation.length > 0 && (
-            <FieldRow label="Rev/Cont">
-              {t.reversalContinuation.map(v => <Badge key={v} label={v} color="var(--text-secondary)" />)}
-            </FieldRow>
-          )}
-          {t.lowerTimeEntry.length > 0 && (
-            <FieldRow label="LTF Entry">
-              {t.lowerTimeEntry.map(v => <Badge key={v} label={v} color="var(--purple)" />)}
-            </FieldRow>
-          )}
-          {t.time && (
-            <FieldRow label="Time">
-              <span style={{ color: 'var(--text-primary)' }}>{t.time}</span>
-            </FieldRow>
-          )}
-        </div>
-
-        {/* Notes */}
-        {t.notes?.trim() && (
-          <div className="text-xs p-3 rounded-lg leading-relaxed" style={{
-            background: 'var(--bg-card)', color: 'var(--text-secondary)',
-            borderLeft: `2px solid ${resultColor}`,
-          }}>
-            {t.notes}
-          </div>
-        )}
-
-        {/* Links */}
-        {(t.tradeIdeaLink || t.oneMTradeLink) && (
-          <div className="flex gap-3 pt-1">
-            {t.tradeIdeaLink && (
-              <a href={t.tradeIdeaLink} target="_blank" rel="noreferrer"
-                className="text-xs font-medium transition-opacity hover:opacity-70"
-                style={{ color: 'var(--blue)' }}>
-                Trade Idea ↗
-              </a>
+          {/* Fields grid */}
+          <div className="space-y-2">
+            {t.poi.length > 0 && (
+              <FieldRow label="POI">
+                {t.poi.map(v => <Badge key={v} label={v} color="var(--purple)" />)}
+              </FieldRow>
             )}
-            {t.oneMTradeLink && (
-              <a href={t.oneMTradeLink} target="_blank" rel="noreferrer"
-                className="text-xs font-medium transition-opacity hover:opacity-70"
-                style={{ color: 'var(--blue)' }}>
-                1M Chart ↗
-              </a>
+            {t.rulesFeelings.length > 0 && (
+              <FieldRow label="Feelings">
+                {t.rulesFeelings.map(v => <Badge key={v} label={v} color="var(--teal)" />)}
+              </FieldRow>
+            )}
+            {t.trend.length > 0 && (
+              <FieldRow label="Trend">
+                {t.trend.map(v => <Badge key={v} label={v} color="var(--text-secondary)" />)}
+              </FieldRow>
+            )}
+            {t.biasForTheDay.length > 0 && (
+              <FieldRow label="Bias">
+                {t.biasForTheDay.map(v => <Badge key={v} label={v} color="var(--yellow)" />)}
+              </FieldRow>
+            )}
+            {t.drawInLiquidity.length > 0 && (
+              <FieldRow label="Draw">
+                {t.drawInLiquidity.map(v => <Badge key={v} label={v} color="var(--blue)" />)}
+              </FieldRow>
+            )}
+            {t.reversalContinuation.length > 0 && (
+              <FieldRow label="Rev/Cont">
+                {t.reversalContinuation.map(v => <Badge key={v} label={v} color="var(--text-secondary)" />)}
+              </FieldRow>
+            )}
+            {t.lowerTimeEntry.length > 0 && (
+              <FieldRow label="LTF Entry">
+                {t.lowerTimeEntry.map(v => <Badge key={v} label={v} color="var(--purple)" />)}
+              </FieldRow>
+            )}
+            {t.time && (
+              <FieldRow label="Time">
+                <span style={{ color: 'var(--text-primary)' }}>{t.time}</span>
+              </FieldRow>
             )}
           </div>
-        )}
+
+          {/* Notes */}
+          {t.notes?.trim() && (
+            <div className="text-sm p-4 rounded-lg" style={{
+              background: 'var(--bg-card)', color: 'var(--text-primary)',
+              borderLeft: `3px solid ${resultColor}`,
+              lineHeight: 1.75,
+            }}>
+              {t.notes}
+            </div>
+          )}
+
+          {/* Links */}
+          {(t.tradeIdeaLink || t.oneMTradeLink) && (
+            <div className="flex gap-3 pt-1">
+              {t.tradeIdeaLink && (
+                <a href={t.tradeIdeaLink} target="_blank" rel="noreferrer"
+                  className="text-xs font-medium transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--blue)' }}>
+                  Trade Idea ↗
+                </a>
+              )}
+              {t.oneMTradeLink && (
+                <a href={t.oneMTradeLink} target="_blank" rel="noreferrer"
+                  className="text-xs font-medium transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--blue)' }}>
+                  1M Chart ↗
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Image groups accordion */}
+        {groupEntries.map(([label, urls], gi) => {
+          const isOpen = expanded[label] ?? false;
+          const isLast = gi === groupEntries.length - 1;
+          return (
+            <div key={label} style={{ borderTop: '1px solid var(--border-color)', borderBottom: isLast ? 'none' : undefined }}>
+              <button
+                onClick={() => toggle(label)}
+                className="w-full flex items-center gap-3 px-4 py-3 transition-colors"
+                style={{ textAlign: 'left', background: isOpen ? 'var(--bg-card)' : 'transparent' }}
+              >
+                <div className="rounded-md overflow-hidden flex-shrink-0 relative"
+                  style={{ width: 48, height: 36, border: `1px solid color-mix(in srgb, ${resultColor} 30%, var(--border-color))` }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={urls[0]} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {!isOpen && urls.length > 1 && (
+                    <div className="absolute inset-0 flex items-center justify-center"
+                      style={{ background: 'rgba(0,0,0,0.52)' }}>
+                      <span className="text-[10px] font-bold" style={{ color: 'white' }}>+{urls.length - 1}</span>
+                    </div>
+                  )}
+                </div>
+                <span className="flex-1 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {urls.length > 1 && (
+                    <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full" style={{
+                      background: `color-mix(in srgb, ${resultColor} 15%, transparent)`,
+                      color: resultColor,
+                    }}>{urls.length}</span>
+                  )}
+                  <span style={{
+                    fontSize: 12, color: 'var(--text-secondary)',
+                    display: 'inline-block',
+                    transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease',
+                  }}>▾</span>
+                </div>
+              </button>
+              {isOpen && (
+                <div className="px-4 pb-4 pt-2 flex flex-wrap gap-3" style={{ background: 'var(--bg-card)' }}>
+                  {urls.map((url, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setLightbox({ urls, idx, label })}
+                      className="rounded-lg overflow-hidden transition-all hover:opacity-80 hover:scale-105"
+                      style={{ width: 100, height: 75, border: `1px solid color-mix(in srgb, ${resultColor} 30%, var(--border-color))`, cursor: 'zoom-in', flexShrink: 0 }}
+                      aria-label={`${label} — תמונה ${idx + 1}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`${label} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Lightbox */}
-      {lightboxIdx !== null && t.images[lightboxIdx] && (
+      {lightbox && (
         <div
-          onClick={closeOnBackdrop}
+          onClick={closeLightbox}
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}
         >
           <div className="relative max-w-5xl w-full mx-4 flex flex-col items-center gap-3">
-            {/* Top bar */}
             <div className="flex items-center justify-between w-full">
-              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                {lightboxIdx + 1} / {t.images.length}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {lightbox.idx + 1} / {lightbox.urls.length}
+                </span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{
+                  background: `color-mix(in srgb, ${resultColor} 25%, transparent)`,
+                  color: resultColor,
+                  border: `1px solid color-mix(in srgb, ${resultColor} 35%, transparent)`,
+                }}>
+                  {lightbox.label}
+                </span>
+              </div>
               <button
-                onClick={() => setLightboxIdx(null)}
+                onClick={() => setLightbox(null)}
                 className="text-sm font-medium transition-opacity hover:opacity-70"
                 style={{ color: 'rgba(255,255,255,0.6)' }}
-                aria-label="סגור"
+              >✕ סגור</button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightbox.urls[lightbox.idx]}
+              alt={`${lightbox.label} ${lightbox.idx + 1}`}
+              className="rounded-xl w-full h-auto"
+              style={{ maxHeight: '80vh', objectFit: 'contain' }}
+            />
+            {lightbox.urls.length > 1 && (
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setLightbox(l => l ? { ...l, idx: Math.max(l.idx - 1, 0) } : null)}
+                  disabled={lightbox.idx === 0}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium"
+                  style={{
+                    background: 'rgba(255,255,255,0.1)',
+                    color: lightbox.idx === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
+                    cursor: lightbox.idx === 0 ? 'default' : 'pointer',
+                  }}
+                >← הקודם</button>
+                <div className="flex gap-1.5">
+                  {lightbox.urls.map((_, i) => (
+                    <button key={i} onClick={() => setLightbox(l => l ? { ...l, idx: i } : null)}
+                      style={{ width: 6, height: 6, borderRadius: '50%', background: i === lightbox.idx ? 'white' : 'rgba(255,255,255,0.3)', cursor: 'pointer', border: 'none', padding: 0 }} />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setLightbox(l => l ? { ...l, idx: Math.min(l.idx + 1, l.urls.length - 1) } : null)}
+                  disabled={lightbox.idx === lightbox.urls.length - 1}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium"
+                  style={{
+                    background: 'rgba(255,255,255,0.1)',
+                    color: lightbox.idx === lightbox.urls.length - 1 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
+                    cursor: lightbox.idx === lightbox.urls.length - 1 ? 'default' : 'pointer',
+                  }}
+                >הבא →</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function NoTradeDayPanel({ entries }: { entries: Trade[] }) {
+  const allImages = entries.flatMap(t => t.images);
+  const notes     = entries.map(t => t.notes?.trim()).filter(Boolean) as string[];
+
+  // Group images by their Notion property label
+  const grouped = allImages.reduce<Record<string, string[]>>((acc, { url, label }) => {
+    (acc[label] ??= []).push(url);
+    return acc;
+  }, {});
+  const groupEntries = Object.entries(grouped);
+
+  const [expanded, setExpanded]   = useState<Record<string, boolean>>({});
+  const [lightbox, setLightbox]   = useState<{ urls: string[]; idx: number; label: string } | null>(null);
+
+  const toggle = useCallback((label: string) =>
+    setExpanded(prev => ({ ...prev, [label]: !prev[label] })), []);
+
+  const closeLightbox = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) setLightbox(null);
+  }, []);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape')     setLightbox(null);
+      if (e.key === 'ArrowRight') setLightbox(l => l ? { ...l, idx: Math.min(l.idx + 1, l.urls.length - 1) } : null);
+      if (e.key === 'ArrowLeft')  setLightbox(l => l ? { ...l, idx: Math.max(l.idx - 1, 0) } : null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
+
+  if (groupEntries.length === 0 && notes.length === 0) {
+    return (
+      <p className="text-xs text-center py-4" style={{ color: 'var(--text-muted)' }}>
+        אין הערות או תמונות ליום זה
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
+
+        {groupEntries.map(([label, urls], gi) => {
+          const isOpen = expanded[label] ?? false;
+          const isLast = gi === groupEntries.length - 1 && notes.length === 0;
+          return (
+            <div key={label} style={{ borderBottom: isLast ? 'none' : '1px solid var(--border-color)' }}>
+
+              {/* Section header — click to toggle */}
+              <button
+                onClick={() => toggle(label)}
+                className="w-full flex items-center gap-3 px-4 py-3 transition-colors"
+                style={{ textAlign: 'left', background: isOpen ? 'var(--bg-card)' : 'transparent' }}
+              >
+                {/* Thumbnail preview of first image */}
+                <div className="rounded-md overflow-hidden flex-shrink-0 relative"
+                  style={{ width: 48, height: 36, border: '1px solid var(--border-color)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={urls[0]} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {/* +N overlay when collapsed and multiple images */}
+                  {!isOpen && urls.length > 1 && (
+                    <div className="absolute inset-0 flex items-center justify-center"
+                      style={{ background: 'rgba(0,0,0,0.52)' }}>
+                      <span className="text-[10px] font-bold" style={{ color: 'white' }}>+{urls.length - 1}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Label */}
+                <span className="flex-1 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {label}
+                </span>
+
+                {/* Count badge + chevron */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {urls.length > 1 && (
+                    <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full" style={{
+                      background: 'color-mix(in srgb, var(--blue) 15%, transparent)',
+                      color: 'var(--blue)',
+                    }}>
+                      {urls.length}
+                    </span>
+                  )}
+                  <span style={{
+                    fontSize: 12, color: 'var(--text-secondary)',
+                    display: 'inline-block',
+                    transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease',
+                  }}>▾</span>
+                </div>
+              </button>
+
+              {/* Expanded: all thumbnails */}
+              {isOpen && (
+                <div className="px-4 pb-4 pt-2 flex flex-wrap gap-3" style={{ background: 'var(--bg-card)' }}>
+                  {urls.map((url, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setLightbox({ urls, idx, label })}
+                      className="rounded-lg overflow-hidden transition-all hover:opacity-80 hover:scale-105"
+                      style={{ width: 100, height: 75, border: '1px solid color-mix(in srgb, var(--blue) 30%, var(--border-color))', cursor: 'zoom-in', flexShrink: 0 }}
+                      aria-label={`${label} — תמונה ${idx + 1}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`${label} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Notes */}
+        {notes.map((note, i) => (
+          <div key={i} className="text-sm px-5 py-4" style={{
+            color: 'var(--text-primary)',
+            borderTop: groupEntries.length > 0 || i > 0 ? '1px solid var(--border-color)' : 'none',
+            borderLeft: '3px solid var(--blue)',
+            lineHeight: 1.75,
+          }}>
+            {note}
+          </div>
+        ))}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          onClick={closeLightbox}
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(6px)' }}
+        >
+          <div className="relative max-w-5xl w-full mx-4 flex flex-col items-center gap-3">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {lightbox.idx + 1} / {lightbox.urls.length}
+                </span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{
+                  background: 'color-mix(in srgb, var(--blue) 25%, transparent)',
+                  color: 'var(--blue)',
+                  border: '1px solid color-mix(in srgb, var(--blue) 35%, transparent)',
+                }}>
+                  {lightbox.label}
+                </span>
+              </div>
+              <button
+                onClick={() => setLightbox(null)}
+                className="text-sm font-medium transition-opacity hover:opacity-70"
+                style={{ color: 'rgba(255,255,255,0.6)' }}
               >
                 ✕ סגור
               </button>
             </div>
 
-            {/* Image */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={t.images[lightboxIdx]}
-              alt={`chart ${lightboxIdx + 1}`}
+              src={lightbox.urls[lightbox.idx]}
+              alt={`${lightbox.label} ${lightbox.idx + 1}`}
               className="rounded-xl w-full h-auto"
               style={{ maxHeight: '80vh', objectFit: 'contain' }}
             />
 
-            {/* Prev / Next */}
-            {t.images.length > 1 && (
+            {lightbox.urls.length > 1 && (
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => setLightboxIdx(i => i !== null ? Math.max(i - 1, 0) : 0)}
-                  disabled={lightboxIdx === 0}
-                  className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  onClick={() => setLightbox(l => l ? { ...l, idx: Math.max(l.idx - 1, 0) } : null)}
+                  disabled={lightbox.idx === 0}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium"
                   style={{
                     background: 'rgba(255,255,255,0.1)',
-                    color: lightboxIdx === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
-                    cursor: lightboxIdx === 0 ? 'default' : 'pointer',
+                    color: lightbox.idx === 0 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
+                    cursor: lightbox.idx === 0 ? 'default' : 'pointer',
                   }}
-                >
-                  ← הקודם
-                </button>
-                {/* Dot indicators */}
+                >← הקודם</button>
                 <div className="flex gap-1.5">
-                  {t.images.map((_, i) => (
+                  {lightbox.urls.map((_, i) => (
                     <button
                       key={i}
-                      onClick={() => setLightboxIdx(i)}
+                      onClick={() => setLightbox(l => l ? { ...l, idx: i } : null)}
                       style={{
                         width: 6, height: 6, borderRadius: '50%',
-                        background: i === lightboxIdx ? 'white' : 'rgba(255,255,255,0.3)',
+                        background: i === lightbox.idx ? 'white' : 'rgba(255,255,255,0.3)',
                         cursor: 'pointer', border: 'none', padding: 0,
                       }}
                     />
                   ))}
                 </div>
                 <button
-                  onClick={() => setLightboxIdx(i => i !== null ? Math.min(i + 1, t.images.length - 1) : 0)}
-                  disabled={lightboxIdx === t.images.length - 1}
-                  className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all"
+                  onClick={() => setLightbox(l => l ? { ...l, idx: Math.min(l.idx + 1, l.urls.length - 1) } : null)}
+                  disabled={lightbox.idx === lightbox.urls.length - 1}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium"
                   style={{
                     background: 'rgba(255,255,255,0.1)',
-                    color: lightboxIdx === t.images.length - 1 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
-                    cursor: lightboxIdx === t.images.length - 1 ? 'default' : 'pointer',
+                    color: lightbox.idx === lightbox.urls.length - 1 ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)',
+                    cursor: lightbox.idx === lightbox.urls.length - 1 ? 'default' : 'pointer',
                   }}
-                >
-                  הבא →
-                </button>
+                >הבא →</button>
               </div>
             )}
           </div>
