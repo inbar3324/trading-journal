@@ -132,25 +132,38 @@ export default function WeeklyPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allTrades]);
 
-  async function runSummary(trades: Trade[], all: Trade[]) {
+  async function callSummary(body: object) {
     setSummaryLoading(true);
     setSummaryError(null);
     setSummary('');
     setSummarySource(null);
-    const dates = trades.map((t) => t.date).filter(Boolean) as string[];
-    const start = dates[0] ?? '';
-    const end   = dates[dates.length - 1] ?? '';
-    const journal = all.filter((t) => t.date && start && end && t.date >= start && t.date <= end);
     try {
       const res = await fetch('/api/weekly-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setSummary(data.summary);
-      setSummarySource(data.source ?? null);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const contentType = res.headers.get('content-type') ?? '';
+
+      if (contentType.includes('text/plain') && res.body) {
+        setSummarySource('ai');
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let text = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          text += decoder.decode(value, { stream: true });
+          setSummary(text);
+        }
+      } else {
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        setSummary(data.summary);
+        setSummarySource(data.source ?? null);
+      }
     } catch (e: unknown) {
       setSummaryError(e instanceof Error ? e.message : 'שגיאה');
     } finally {
@@ -158,30 +171,20 @@ export default function WeeklyPage() {
     }
   }
 
+  async function runSummary(trades: Trade[], all: Trade[]) {
+    const dates   = trades.map((t) => t.date).filter(Boolean) as string[];
+    const start   = dates[0] ?? '';
+    const end     = dates[dates.length - 1] ?? '';
+    const journal = all.filter((t) => t.date && start && end && t.date >= start && t.date <= end);
+    await callSummary({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes });
+  }
+
   async function generateSummary() {
     if (periodTrades.length === 0) return;
     const journal = allTrades.filter(
       (t) => t.date && periodStart && periodEnd && t.date >= periodStart && t.date <= periodEnd,
     );
-    setSummaryLoading(true);
-    setSummaryError(null);
-    setSummary('');
-    setSummarySource(null);
-    try {
-      const res = await fetch('/api/weekly-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd, freeNotes }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setSummary(data.summary);
-      setSummarySource(data.source ?? null);
-    } catch (e: unknown) {
-      setSummaryError(e instanceof Error ? e.message : 'שגיאה');
-    } finally {
-      setSummaryLoading(false);
-    }
+    await callSummary({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd, freeNotes });
   }
 
   if (loading) {
