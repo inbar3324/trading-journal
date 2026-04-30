@@ -431,7 +431,7 @@ export default function WeeklyPage() {
                       color: summarySource === 'ai' ? 'var(--purple)' : 'var(--blue)',
                       border: `1px solid ${summarySource === 'ai' ? 'rgba(124,58,237,0.3)' : 'rgba(59,130,246,0.25)'}`,
                     }}>
-                      {summarySource === 'ai' ? 'Gemini 2.0 Flash Exp' : 'Statistical'}
+                      {summarySource === 'ai' ? 'Gemini 2.5 Flash' : 'Statistical'}
                     </span>
                   )}
                 </div>
