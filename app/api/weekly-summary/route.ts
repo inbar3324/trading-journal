@@ -20,13 +20,15 @@ export async function POST(request: Request) {
   let journalEntries: Trade[] | undefined;
   let weekStart = '';
   let weekEnd = '';
+  let freeNotes = '';
 
   try {
     const body = await request.json();
-    trades        = body.trades        ?? [];
+    trades         = body.trades         ?? [];
     journalEntries = body.journalEntries;
-    weekStart     = body.weekStart     ?? '';
-    weekEnd       = body.weekEnd       ?? '';
+    weekStart      = body.weekStart      ?? '';
+    weekEnd        = body.weekEnd        ?? '';
+    freeNotes      = body.freeNotes      ?? '';
   } catch {
     return Response.json({ error: 'שגיאה בקריאת הנתונים' }, { status: 400 });
   }
@@ -89,6 +91,7 @@ export async function POST(request: Request) {
       ...allEntries
         .filter((t) => !t.tookTrade.includes('TOOK TRADE') && t.notes?.trim())
         .map((t) => `[ימי צפייה] ${t.notes!.trim()}`),
+      ...(freeNotes.trim() ? [`[הערות חופשיות] ${freeNotes.trim()}`] : []),
     ].join('\n\n');
 
     const systemPrompt = `You are a professional trading mentor and data analyst reading a trader's personal journal. Your only job in the "בעיה שחוזרת על עצמה" section is to find the real behavioral problem — the mistake that actually cost money or discipline. Nothing else.

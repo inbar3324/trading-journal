@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Sidebar from '@/components/layout/Sidebar';
 import PWAInstall from '@/components/ui/PWAInstall';
+import NotionConfigProvider from '@/components/providers/NotionConfigProvider';
 
 export const metadata: Metadata = {
   title: 'Trading Journal 2026',
@@ -22,10 +23,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-        <Sidebar />
-        <main className="flex-1 ml-[220px] overflow-y-auto" style={{ background: 'var(--bg-primary)' }}>
-          {children}
-        </main>
+        <NotionConfigProvider>
+          <Sidebar />
+          <main className="flex-1 ml-[220px] overflow-y-auto" style={{ background: 'var(--bg-primary)' }}>
+            {children}
+          </main>
+        </NotionConfigProvider>
         <PWAInstall />
       </body>
     </html>

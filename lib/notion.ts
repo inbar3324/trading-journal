@@ -2,10 +2,7 @@
 import { Client } from '@notionhq/client';
 import type { Trade } from './types';
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY, timeoutMs: 8000 });
-
-// Data source ID for "2026 מסחר" (the collection ID, not the database page ID)
-const DATA_SOURCE_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
+const DEFAULT_DB_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
 
 function multiSelect(prop: unknown): string[] {
   if (!prop || typeof prop !== 'object') return [];
@@ -82,14 +79,20 @@ function parseTrade(page: Record<string, unknown>): Trade {
   };
 }
 
-export async function getAllTrades(): Promise<Trade[]> {
+export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<Trade[]> {
+  const notion = new Client({
+    auth: creds?.key ?? process.env.NOTION_API_KEY,
+    timeoutMs: 8000,
+  });
+  const dataSourceId = creds?.dbId ?? process.env.NOTION_DATABASE_ID ?? DEFAULT_DB_ID;
+
   const trades: Trade[] = [];
   let cursor: string | undefined;
 
   do {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await (notion.dataSources as any).query({
-      data_source_id: DATA_SOURCE_ID,
+      data_source_id: dataSourceId,
       start_cursor: cursor,
       page_size: 100,
       sorts: [{ property: 'Date', direction: 'ascending' }],

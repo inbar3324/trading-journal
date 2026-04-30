@@ -7,6 +7,7 @@ import {
   filterByDateRange, toISODate, getWeekStart,
   DATE_RANGE_LABELS, type DateRange,
 } from '@/lib/utils';
+import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
 const PRESETS: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
 
@@ -72,9 +73,10 @@ export default function WeeklyPage() {
   const [summarySource, setSummarySource]   = useState<'ai' | 'stats' | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError]     = useState<string | null>(null);
+  const [freeNotes, setFreeNotes]           = useState('');
 
   useEffect(() => {
-    fetch('/api/trades')
+    fetch('/api/trades', { headers: notionHeaders(getNotionConfig()) })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
@@ -143,7 +145,7 @@ export default function WeeklyPage() {
       const res = await fetch('/api/weekly-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades, journalEntries: journal, weekStart: start, weekEnd: end }),
+        body: JSON.stringify({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -169,7 +171,7 @@ export default function WeeklyPage() {
       const res = await fetch('/api/weekly-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd }),
+        body: JSON.stringify({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd, freeNotes }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -395,6 +397,28 @@ export default function WeeklyPage() {
 
           {/* AI Summary */}
           <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+            {/* Free-text notes — shown when no trade notes exist */}
+            {periodTrades.every((t) => !t.notes?.trim()) && (
+              <div className="mb-5">
+                <div className="text-xs font-medium mb-2 uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                  הערות חופשיות לסיכום
+                </div>
+                <textarea
+                  value={freeNotes}
+                  onChange={(e) => setFreeNotes(e.target.value)}
+                  placeholder="אין הערות ב-Notion — כתוב כאן מה קרה השבוע, מה עבד, מה לא..."
+                  rows={4}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none resize-none"
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.7,
+                  }}
+                  dir="rtl"
+                />
+              </div>
+            )}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className="flex items-center gap-2">

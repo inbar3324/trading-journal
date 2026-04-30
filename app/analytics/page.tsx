@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import type { Trade } from '@/lib/types';
 import { getActualTrades } from '@/lib/utils';
+import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
 type TradeArrayField =
   | 'poi' | 'biasForTheDay' | 'drawInLiquidity' | 'lowerTimeEntry'
@@ -559,7 +560,7 @@ export default function AnalyticsPage() {
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch('/api/trades')
+    fetch('/api/trades', { headers: notionHeaders(getNotionConfig()) })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);

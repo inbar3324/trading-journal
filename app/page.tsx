@@ -15,6 +15,7 @@ import KpiCard from '@/components/ui/KpiCard';
 import PnlChart from '@/components/charts/PnlChart';
 import PieDistribution from '@/components/charts/PieDistribution';
 import { CalendarDays, AlertTriangle } from 'lucide-react';
+import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
 const RANGES: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
 
@@ -27,7 +28,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
-    fetch('/api/trades', { signal: controller.signal })
+    fetch('/api/trades', { signal: controller.signal, headers: notionHeaders(getNotionConfig()) })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
