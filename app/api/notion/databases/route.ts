@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const res = await (notion as unknown as {
       search: (args: object) => Promise<{ results: Record<string, unknown>[] }>;
     }).search({
-      filter: { value: 'database', property: 'object' },
+      filter: { value: 'data_source', property: 'object' },
       page_size: 50,
     });
 
