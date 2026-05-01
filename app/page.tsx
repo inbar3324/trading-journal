@@ -302,24 +302,46 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
   }, [allTrades]);
 
   const jumpedRef = useRef(false);
+  const [calMode, setCalMode] = useState<'month' | 'week'>('month');
 
   const [viewMonth, setViewMonth] = useState(() => {
     const n = new Date();
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  const [viewWeekStart, setViewWeekStart] = useState(() => {
+    const n = new Date();
+    const sun = new Date(n);
+    sun.setDate(n.getDate() - n.getDay());
+    return `${sun.getFullYear()}-${String(sun.getMonth() + 1).padStart(2, '0')}-${String(sun.getDate()).padStart(2, '0')}`;
+  });
+
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (jumpedRef.current || dateMap.size === 0) return;
     jumpedRef.current = true;
     const dates = Array.from(dateMap.keys()).sort();
-    setViewMonth(dates[dates.length - 1].slice(0, 7));
+    const lastDate = dates[dates.length - 1];
+    setViewMonth(lastDate.slice(0, 7));
+    const parts = lastDate.split('-').map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    const sun = new Date(d);
+    sun.setDate(d.getDate() - d.getDay());
+    setViewWeekStart(`${sun.getFullYear()}-${String(sun.getMonth() + 1).padStart(2, '0')}-${String(sun.getDate()).padStart(2, '0')}`);
   }, [dateMap]);
 
   const changeMonth = (delta: number) => {
     const [y, mo] = viewMonth.split('-').map(Number);
     const d = new Date(y, mo - 1 + delta, 1);
     setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    setSelectedDate(null);
+  };
+
+  const changeWeek = (delta: number) => {
+    const [y, mo, da] = viewWeekStart.split('-').map(Number);
+    const d = new Date(y, mo - 1, da + delta * 7);
+    setViewWeekStart(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
     setSelectedDate(null);
   };
 
@@ -335,10 +357,33 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
     return cells;
   }, [viewMonth]);
 
+  const weekDays = useMemo(() => {
+    const [y, mo, da] = viewWeekStart.split('-').map(Number);
+    const start = new Date(y, mo - 1, da);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+  }, [viewWeekStart]);
+
   const [y, mo] = viewMonth.split('-').map(Number);
-  const monthDays = Array.from(dateMap.keys()).filter(d => d.startsWith(viewMonth));
+  const monthDays    = Array.from(dateMap.keys()).filter(d => d.startsWith(viewMonth));
   const monthTrade   = monthDays.filter(d => dateMap.get(d)?.isTrade).length;
   const monthNoTrade = monthDays.filter(d => !dateMap.get(d)?.isTrade).length;
+
+  const weekTradeCount   = weekDays.filter(d => dateMap.get(d)?.isTrade).length;
+  const weekNoTradeCount = weekDays.filter(d => dateMap.get(d) && !dateMap.get(d)!.isTrade).length;
+  const weekTotalPnl     = weekDays.reduce((sum, d) => sum + (dateMap.get(d)?.totalPnl ?? 0), 0);
+
+  const weekNavLabel = (() => {
+    const [wy, wmo, wda] = viewWeekStart.split('-').map(Number);
+    const s = new Date(wy, wmo - 1, wda);
+    const e = new Date(wy, wmo - 1, wda + 6);
+    const sLabel = `${CALENDAR_MONTHS[s.getMonth()].slice(0, 3)} ${s.getDate()}`;
+    const eLabel = `${CALENDAR_MONTHS[e.getMonth()].slice(0, 3)} ${e.getDate()}, ${e.getFullYear()}`;
+    return `${sLabel} — ${eLabel}`;
+  })();
 
   const selectedDay = selectedDate ? dateMap.get(selectedDate) : undefined;
 
@@ -356,33 +401,67 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
       {/* Header */}
       <div className="px-5 pt-5 pb-4 flex items-center justify-between">
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Trade Calendar
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              Trade Calendar
+            </div>
+            {/* Mode toggle */}
+            <div style={{ display: 'flex', background: 'var(--bg-surface)', borderRadius: 8, padding: 2, border: '1px solid var(--border-color)', gap: 1 }}>
+              {(['month', 'week'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => { setCalMode(mode); setSelectedDate(null); }}
+                  style={{
+                    fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                    background: calMode === mode ? 'var(--blue)' : 'transparent',
+                    color: calMode === mode ? 'white' : 'var(--text-muted)',
+                    transition: 'all 150ms var(--ease-out)',
+                    cursor: 'pointer', border: 'none',
+                  }}
+                >
+                  {mode === 'month' ? 'Monthly' : 'Weekly'}
+                </button>
+              ))}
+            </div>
           </div>
           <div style={{ fontSize: 11, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
-            {monthTrade > 0 && <span style={{ color: 'var(--green)' }}>{monthTrade} TOOK TRADE</span>}
-            {monthTrade > 0 && monthNoTrade > 0 && <span>·</span>}
-            {monthNoTrade > 0 && <span style={{ color: 'var(--blue)' }}>{monthNoTrade} NO TRADE</span>}
-            {monthTrade === 0 && monthNoTrade === 0 && <span>אין רשומות בחודש זה</span>}
+            {calMode === 'month' ? (
+              <>
+                {monthTrade > 0 && <span style={{ color: 'var(--green)' }}>{monthTrade} TOOK TRADE</span>}
+                {monthTrade > 0 && monthNoTrade > 0 && <span>·</span>}
+                {monthNoTrade > 0 && <span style={{ color: 'var(--blue)' }}>{monthNoTrade} NO TRADE</span>}
+                {monthTrade === 0 && monthNoTrade === 0 && <span>אין רשומות בחודש זה</span>}
+              </>
+            ) : (
+              <>
+                {weekTradeCount > 0 && <span style={{ color: 'var(--green)' }}>{weekTradeCount} TOOK TRADE</span>}
+                {weekTradeCount > 0 && weekNoTradeCount > 0 && <span>·</span>}
+                {weekNoTradeCount > 0 && <span style={{ color: 'var(--blue)' }}>{weekNoTradeCount} NO TRADE</span>}
+                {weekTotalPnl !== 0 && (
+                  <>
+                    <span>·</span>
+                    <span style={{ color: weekTotalPnl > 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+                      {weekTotalPnl >= 0 ? '+' : ''}{weekTotalPnl.toFixed(0)}
+                    </span>
+                  </>
+                )}
+                {weekTradeCount === 0 && weekNoTradeCount === 0 && <span>אין רשומות בשבוע זה</span>}
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => changeMonth(-1)}
+            onClick={() => calMode === 'month' ? changeMonth(-1) : changeWeek(-1)}
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
+              width: 32, height: 32, borderRadius: 9,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)', cursor: 'pointer',
               transition: 'all 150ms var(--ease-out)',
             }}
-            aria-label="prev month"
+            aria-label="prev"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M9 2.5L5 7l4 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -392,24 +471,18 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
             className="tabular"
             style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 148, textAlign: 'center', letterSpacing: '-0.01em' }}
           >
-            {CALENDAR_MONTHS[mo - 1]} {y}
+            {calMode === 'month' ? `${CALENDAR_MONTHS[mo - 1]} ${y}` : weekNavLabel}
           </span>
           <button
-            onClick={() => changeMonth(1)}
+            onClick={() => calMode === 'month' ? changeMonth(1) : changeWeek(1)}
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 9,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
+              width: 32, height: 32, borderRadius: 9,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)', cursor: 'pointer',
               transition: 'all 150ms var(--ease-out)',
             }}
-            aria-label="next month"
+            aria-label="next"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M5 2.5L9 7l-4 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -428,66 +501,127 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1.5 px-5 pb-5">
-        {calCells.map((dateStr, i) => {
-          if (!dateStr) return <div key={i} style={{ height: 64 }} />;
-          const day = dateMap.get(dateStr);
-          const isSelected = dateStr === selectedDate;
-          const dayNum = parseInt(dateStr.slice(8), 10);
-          const base = day ? dayColor(day) : null;
-          const intensity = isSelected ? 28 : 18;
-          const tradeEntries = day?.entries.filter(t => t.tookTrade.includes('TOOK TRADE')) ?? [];
+      {/* Calendar grid — Monthly */}
+      {calMode === 'month' && (
+        <div className="grid grid-cols-7 gap-1.5 px-5 pb-5">
+          {calCells.map((dateStr, i) => {
+            if (!dateStr) return <div key={i} style={{ height: 64 }} />;
+            const day = dateMap.get(dateStr);
+            const isSelected = dateStr === selectedDate;
+            const dayNum = parseInt(dateStr.slice(8), 10);
+            const base = day ? dayColor(day) : null;
+            const intensity = isSelected ? 28 : 18;
+            const tradeEntries = day?.entries.filter(t => t.tookTrade.includes('TOOK TRADE')) ?? [];
 
-          return (
-            <button
-              key={dateStr}
-              onClick={() => { if (day) setSelectedDate(isSelected ? null : dateStr); }}
-              className="rounded-xl flex flex-col items-center justify-center transition-all"
-              style={{
-                height: 64,
-                gap: 2,
-                background: base
-                  ? `color-mix(in srgb, ${base} ${intensity}%, var(--bg-surface))`
-                  : 'var(--bg-surface)',
-                border: `1.5px solid ${
-                  isSelected && base ? base
-                  : base ? `color-mix(in srgb, ${base} 35%, var(--border-color))`
-                  : 'var(--border-color)'}`,
-                outline: isSelected && base ? `2px solid ${base}` : 'none',
-                outlineOffset: 1,
-                cursor: day ? 'pointer' : 'default',
-              }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1, color: base ?? 'var(--text-secondary)' }}>
-                {dayNum}
-              </span>
-              {/* TOOK TRADE: PnL + result dots */}
-              {day?.isTrade && day.totalPnl !== 0 && (
-                <span style={{ fontSize: 9, fontWeight: 700, lineHeight: 1, color: base! }}>
-                  {day.totalPnl >= 0 ? '+' : ''}{day.totalPnl.toFixed(0)}
+            return (
+              <button
+                key={dateStr}
+                onClick={() => { if (day) setSelectedDate(isSelected ? null : dateStr); }}
+                className="rounded-xl flex flex-col items-center justify-center transition-all"
+                style={{
+                  height: 64, gap: 2,
+                  background: base
+                    ? `color-mix(in srgb, ${base} ${intensity}%, var(--bg-surface))`
+                    : 'var(--bg-surface)',
+                  border: `1.5px solid ${
+                    isSelected && base ? base
+                    : base ? `color-mix(in srgb, ${base} 35%, var(--border-color))`
+                    : 'var(--border-color)'}`,
+                  outline: isSelected && base ? `2px solid ${base}` : 'none',
+                  outlineOffset: 1,
+                  cursor: day ? 'pointer' : 'default',
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1, color: base ?? 'var(--text-secondary)' }}>
+                  {dayNum}
                 </span>
-              )}
-              {day?.isTrade && tradeEntries.length > 0 && (
-                <div style={{ display: 'flex', gap: 2 }}>
-                  {tradeEntries.slice(0, 4).map((t, ti) => (
-                    <div key={ti} style={{
-                      width: 4, height: 4, borderRadius: '50%',
-                      background: t.winLose.includes('win') ? 'var(--green)' : t.winLose.includes('lose') ? 'var(--red)' : 'var(--yellow)',
-                    }} />
-                  ))}
-                </div>
-              )}
-              {/* Label */}
-              {day && (
-                <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', lineHeight: 1, color: base!, textTransform: 'uppercase' }}>
-                  {day.isTrade ? 'TOOK TRADE' : 'NO TRADE'}
+                {day?.isTrade && day.totalPnl !== 0 && (
+                  <span style={{ fontSize: 9, fontWeight: 700, lineHeight: 1, color: base! }}>
+                    {day.totalPnl >= 0 ? '+' : ''}{day.totalPnl.toFixed(0)}
+                  </span>
+                )}
+                {day?.isTrade && tradeEntries.length > 0 && (
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {tradeEntries.slice(0, 4).map((t, ti) => (
+                      <div key={ti} style={{
+                        width: 4, height: 4, borderRadius: '50%',
+                        background: t.winLose.includes('win') ? 'var(--green)' : t.winLose.includes('lose') ? 'var(--red)' : 'var(--yellow)',
+                      }} />
+                    ))}
+                  </div>
+                )}
+                {day && (
+                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', lineHeight: 1, color: base!, textTransform: 'uppercase' }}>
+                    {day.isTrade ? 'TOOK TRADE' : 'NO TRADE'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Calendar grid — Weekly */}
+      {calMode === 'week' && (
+        <div className="grid grid-cols-7 gap-2 px-5 pb-5">
+          {weekDays.map((dateStr, i) => {
+            const day = dateMap.get(dateStr);
+            const isSelected = dateStr === selectedDate;
+            const dayNum = parseInt(dateStr.slice(8), 10);
+            const base = day ? dayColor(day) : null;
+            const intensity = isSelected ? 28 : 18;
+            const tradeEntries = day?.entries.filter(t => t.tookTrade.includes('TOOK TRADE')) ?? [];
+
+            return (
+              <button
+                key={dateStr}
+                onClick={() => { if (day) setSelectedDate(isSelected ? null : dateStr); }}
+                className="rounded-xl flex flex-col items-center justify-center transition-all"
+                style={{
+                  height: 100, gap: 4, padding: '8px 4px',
+                  background: base
+                    ? `color-mix(in srgb, ${base} ${intensity}%, var(--bg-surface))`
+                    : 'var(--bg-surface)',
+                  border: `1.5px solid ${
+                    isSelected && base ? base
+                    : base ? `color-mix(in srgb, ${base} 35%, var(--border-color))`
+                    : 'var(--border-color)'}`,
+                  outline: isSelected && base ? `2px solid ${base}` : 'none',
+                  outlineOffset: 1,
+                  cursor: day ? 'pointer' : 'default',
+                }}
+              >
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: base ?? 'var(--text-muted)', lineHeight: 1 }}>
+                  {WEEK_DAYS[i]}
                 </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+                <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, color: base ?? 'var(--text-secondary)', letterSpacing: '-0.02em' }}>
+                  {dayNum}
+                </span>
+                {day?.isTrade && day.totalPnl !== 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1, color: base! }}>
+                    {day.totalPnl >= 0 ? '+' : ''}{day.totalPnl.toFixed(0)}
+                  </span>
+                )}
+                {day?.isTrade && tradeEntries.length > 0 && (
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {tradeEntries.slice(0, 5).map((t, ti) => (
+                      <div key={ti} style={{
+                        width: 5, height: 5, borderRadius: '50%',
+                        background: t.winLose.includes('win') ? 'var(--green)' : t.winLose.includes('lose') ? 'var(--red)' : 'var(--yellow)',
+                      }} />
+                    ))}
+                  </div>
+                )}
+                {day && (
+                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: '0.04em', lineHeight: 1, color: base!, textTransform: 'uppercase' }}>
+                    {day.isTrade ? 'TOOK' : 'NO TRADE'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Detail panel */}
       {selectedDate && selectedDay && (
