@@ -14,7 +14,7 @@ import {
 import KpiCard from '@/components/ui/KpiCard';
 import PnlChart from '@/components/charts/PnlChart';
 import PieDistribution from '@/components/charts/PieDistribution';
-import { CalendarDays, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
 const RANGES: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
@@ -55,10 +55,15 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-1" style={{ borderBottom: '1px solid var(--border-color)' }}>
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Dashboard</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+          <h1
+            className="font-bold"
+            style={{ fontSize: 22, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.2 }}
+          >
+            Dashboard
+          </h1>
+          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--text-secondary)', letterSpacing: '0.01em' }}>
             {allTrades.length} ימי מסחר ביומן
           </p>
         </div>
@@ -66,17 +71,25 @@ export default function DashboardPage() {
 
       {/* Date Range Tabs */}
       <div
-        className="flex items-center gap-1 p-1 rounded-xl w-fit"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+        className="flex items-center gap-0.5 p-1 rounded-xl w-fit"
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
+        }}
       >
         {RANGES.map((r) => (
           <button
             key={r}
             onClick={() => setRange(r)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium"
             style={{
               background: range === r ? 'var(--blue)' : 'transparent',
               color: range === r ? 'white' : 'var(--text-secondary)',
+              fontWeight: range === r ? 600 : 400,
+              letterSpacing: range === r ? '-0.01em' : '0',
+              transition: 'all 160ms var(--ease-out)',
+              boxShadow: range === r ? '0 1px 4px rgba(59,130,246,0.3)' : 'none',
             }}
           >
             {DATE_RANGE_LABELS[r]}
@@ -84,116 +97,172 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Empty state */}
-      {actual.length === 0 && (
+      {/* KPI Grid — always visible, shows zeros when no trades in range */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <KpiCard
+          title="Total PNL"
+          value={formatPnl(stats.totalPnl)}
+          color={stats.totalPnl > 0 ? 'green' : stats.totalPnl < 0 ? 'red' : 'neutral'}
+          subtitle={`${stats.tradedDays} trades`}
+        />
+        <KpiCard
+          title="Win Rate"
+          value={`${stats.winRate.toFixed(1)}%`}
+          color={actual.length === 0 ? 'neutral' : stats.winRate >= 50 ? 'green' : 'red'}
+          subtitle={`${stats.wins}W / ${stats.losses}L`}
+        />
         <div
-          className="rounded-xl p-10 flex flex-col items-center gap-3 text-center"
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+          style={{
+            borderRadius: '1.25rem',
+            padding: 5,
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+          }}
         >
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}
+            style={{
+              borderRadius: 'calc(1.25rem - 5px)',
+              padding: '16px 20px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 7,
+              background: 'var(--bg-card)',
+              borderTop: '2px solid var(--border-hover)',
+              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03)',
+            }}
           >
-            <CalendarDays size={18} style={{ color: 'var(--text-muted)' }} />
-          </div>
-          <div style={{ color: 'var(--text-secondary)' }}>
-            No trades found for{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>{DATE_RANGE_LABELS[range]}</strong>
-          </div>
-        </div>
-      )}
-
-      {actual.length > 0 && (
-        <>
-          {/* KPI Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <KpiCard
-              title="Total PNL"
-              value={formatPnl(stats.totalPnl)}
-              color={stats.totalPnl >= 0 ? 'green' : 'red'}
-              subtitle={`${stats.tradedDays} trades`}
-            />
-            <KpiCard
-              title="Win Rate"
-              value={`${stats.winRate.toFixed(1)}%`}
-              color={stats.winRate >= 50 ? 'green' : 'red'}
-              subtitle={`${stats.wins}W / ${stats.losses}L`}
-            />
-            <div
-              className="rounded-xl px-5 pt-4 pb-5 flex flex-col gap-2"
-              style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderTop: '2px solid var(--border-hover)' }}
-            >
-              <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-                Gross P&amp;L
-              </span>
-              <div className="text-xl font-bold tabular" style={{ color: 'var(--green)' }}>{formatPnl(Math.round(grossWins * 100) / 100)}</div>
-              <div className="text-xl font-bold tabular" style={{ color: 'var(--red)' }}>{formatPnl(Math.round(grossLosses * 100) / 100)}</div>
-              <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                {stats.wins}W / {stats.losses}L{stats.breakevens > 0 ? ` / ${stats.breakevens} BE` : ''}
-              </div>
+            <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>
+              Gross P&amp;L
+            </span>
+            <div className="tabular" style={{ fontSize: 22, fontWeight: 700, color: 'var(--green)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+              {formatPnl(Math.round(grossWins * 100) / 100)}
+            </div>
+            <div className="tabular" style={{ fontSize: 22, fontWeight: 700, color: 'var(--red)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+              {formatPnl(Math.round(grossLosses * 100) / 100)}
+            </div>
+            <div className="tabular" style={{ fontSize: 11, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}>
+              {stats.wins}W / {stats.losses}L{stats.breakevens > 0 ? ` / ${stats.breakevens} BE` : ''}
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* PNL Chart */}
+      {/* PNL Chart with calendar positioning based on data availability */}
+      {pnlCurve.length > 0 ? (
+        <>
           <div
-            className="rounded-xl p-5"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+            className="rounded-2xl p-5"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+            }}
           >
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                   Cumulative PNL
                 </div>
-                <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
                   עקומת רווח / הפסד — {DATE_RANGE_LABELS[range]}
                 </div>
               </div>
-              <div className="text-lg font-bold" style={{ color: stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              <div
+                className="tabular"
+                style={{ fontSize: 18, fontWeight: 700, color: stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)', letterSpacing: '-0.03em' }}
+              >
                 {formatPnl(stats.totalPnl)}
               </div>
             </div>
             <PnlChart data={pnlCurve} />
           </div>
-
-          {/* Trade Timeline */}
           <TradeTimeline allTrades={allTrades} />
-
-          {/* Bottom Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Win / Loss / BE</div>
-              <PieDistribution wins={stats.wins} losses={stats.losses} breakevens={stats.breakevens} />
+        </>
+      ) : (
+        <>
+          <TradeTimeline allTrades={allTrades} />
+          <div
+            className="rounded-2xl p-5"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 12 }}>
+              Cumulative PNL
             </div>
-
-            <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-                עסקאות אחרונות
-              </div>
-              <div className="space-y-1 overflow-y-auto max-h-[200px]">
-                {recentTrades.map((t) => {
-                  const isWin = t.winLose.includes('win');
-                  const isLoss = t.winLose.includes('lose');
-                  const color = isWin ? 'var(--green)' : isLoss ? 'var(--red)' : 'var(--text-secondary)';
-                  return (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between text-xs py-1.5"
-                      style={{ borderBottom: '1px solid var(--border-color)' }}
-                    >
-                      <div style={{ color: 'var(--text-secondary)' }}>{t.date}</div>
-                      <div style={{ color: 'var(--text-secondary)' }}>{t.indices[0] ?? '—'}</div>
-                      <div style={{ color }}>{t.winLose[0] ?? '—'}</div>
-                      <div className="font-semibold" style={{ color }}>
-                        {t.pnl !== null ? formatPnl(t.pnl) : '—'}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>אין עסקאות ב{DATE_RANGE_LABELS[range]}</span>
             </div>
           </div>
         </>
       )}
+
+      {/* Bottom Row — always visible */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div
+          className="rounded-2xl p-5"
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            Win / Loss / BE
+          </div>
+          {actual.length > 0 ? (
+            <PieDistribution wins={stats.wins} losses={stats.losses} breakevens={stats.breakevens} />
+          ) : (
+            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>0W / 0L / 0BE</span>
+            </div>
+          )}
+        </div>
+
+        <div
+          className="rounded-2xl p-5"
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            עסקאות אחרונות
+          </div>
+          {recentTrades.length > 0 ? (
+            <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
+              {recentTrades.map((t) => {
+                const isWin = t.winLose.includes('win');
+                const isLoss = t.winLose.includes('lose');
+                const color = isWin ? 'var(--green)' : isLoss ? 'var(--red)' : 'var(--text-secondary)';
+                return (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between py-1.5"
+                    style={{ borderBottom: '1px solid var(--border-color)', fontSize: 12 }}
+                  >
+                    <div className="tabular" style={{ color: 'var(--text-muted)', minWidth: 80 }}>{t.date}</div>
+                    <div style={{ color: 'var(--text-secondary)', flex: 1 }}>{t.indices[0] ?? '—'}</div>
+                    <div style={{ color, marginRight: 16 }}>{t.winLose[0] ?? '—'}</div>
+                    <div className="tabular" style={{ fontWeight: 600, color, minWidth: 60, textAlign: 'right' }}>
+                      {t.pnl !== null ? formatPnl(t.pnl) : '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>אין עסקאות ב{DATE_RANGE_LABELS[range]}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
     </div>
   );
 }
@@ -276,12 +345,21 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
   if (dateMap.size === 0) return null;
 
   return (
-    <div className="rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+    <div
+      className="rounded-2xl"
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-color)',
+        boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+      }}
+    >
       {/* Header */}
       <div className="px-5 pt-5 pb-4 flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Trade Calendar</div>
-          <div className="text-xs mt-0.5 flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            Trade Calendar
+          </div>
+          <div style={{ fontSize: 11, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}>
             {monthTrade > 0 && <span style={{ color: 'var(--green)' }}>{monthTrade} TOOK TRADE</span>}
             {monthTrade > 0 && monthNoTrade > 0 && <span>·</span>}
             {monthNoTrade > 0 && <span style={{ color: 'var(--blue)' }}>{monthNoTrade} NO TRADE</span>}
@@ -289,21 +367,50 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => changeMonth(-1)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-70"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-            aria-label="prev month">
+          <button
+            onClick={() => changeMonth(-1)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 9,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 150ms var(--ease-out)',
+            }}
+            aria-label="prev month"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M9 2.5L5 7l4 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)', minWidth: 150, textAlign: 'center' }}>
+          <span
+            className="tabular"
+            style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 148, textAlign: 'center', letterSpacing: '-0.01em' }}
+          >
             {CALENDAR_MONTHS[mo - 1]} {y}
           </span>
-          <button onClick={() => changeMonth(1)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-70"
-            style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-            aria-label="next month">
+          <button
+            onClick={() => changeMonth(1)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 9,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              transition: 'all 150ms var(--ease-out)',
+            }}
+            aria-label="next month"
+          >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M5 2.5L9 7l-4 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -898,39 +1005,94 @@ function NoTradeDayPanel({ entries }: { entries: Trade[] }) {
 
 function LoadingState() {
   return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center space-y-3">
-        <div
-          className="w-8 h-8 border-2 rounded-full animate-spin mx-auto"
-          style={{ borderColor: 'var(--border-hover)', borderTopColor: 'var(--blue)' }}
-        />
-        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading from Notion...</div>
+    <div className="p-6 space-y-5">
+      <div style={{ paddingBottom: 8, borderBottom: '1px solid var(--border-color)' }}>
+        <div className="skeleton" style={{ height: 24, width: 140, borderRadius: 8 }} />
+        <div className="skeleton" style={{ height: 14, width: 200, borderRadius: 6, marginTop: 8 }} />
       </div>
+      <div className="skeleton" style={{ height: 40, width: 480, maxWidth: '100%', borderRadius: 12 }} />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            style={{
+              borderRadius: '1.25rem',
+              padding: 5,
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
+          >
+            <div className="skeleton" style={{ borderRadius: 'calc(1.25rem - 5px)', height: 92 }} />
+          </div>
+        ))}
+      </div>
+      <div className="skeleton" style={{ borderRadius: 16, height: 260 }} />
+      <div className="skeleton" style={{ borderRadius: 16, height: 340 }} />
     </div>
   );
 }
 
 function ErrorState({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center h-screen">
+    <div className="flex items-center justify-center" style={{ minHeight: '100dvh' }}>
       <div
-        className="rounded-xl p-8 max-w-md w-full mx-4 space-y-4"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+        style={{
+          borderRadius: '1.5rem',
+          padding: 6,
+          maxWidth: 440,
+          width: '100%',
+          margin: '0 16px',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+        }}
       >
-        <div className="flex items-center gap-3">
-          <AlertTriangle size={18} style={{ color: 'var(--red)', flexShrink: 0 }} />
-          <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Notion Connection Error
-          </div>
-        </div>
-        <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{message}</div>
         <div
-          className="text-xs p-3 rounded-lg space-y-1"
-          style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)', borderLeft: '2px solid var(--blue)' }}
+          style={{
+            borderRadius: 'calc(1.5rem - 6px)',
+            padding: '28px 28px',
+            background: 'var(--bg-card)',
+            boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03)',
+          }}
         >
-          <div>1. Create a Notion Integration at notion.so/my-integrations</div>
-          <div>2. Add the Secret to .env.local as NOTION_API_KEY</div>
-          <div>3. Share the database with the Integration</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(244,63,94,0.08)',
+                border: '1px solid rgba(244,63,94,0.18)',
+                flexShrink: 0,
+              }}
+            >
+              <AlertTriangle size={16} style={{ color: 'var(--red)' }} />
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              Notion Connection Error
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16 }}>
+            {message}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              padding: '12px 14px',
+              borderRadius: 10,
+              background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)',
+              borderLeft: '2px solid var(--blue)',
+              lineHeight: 1.9,
+            }}
+          >
+            <div>1. Create a Notion Integration at notion.so/my-integrations</div>
+            <div>2. Add the Secret to .env.local as NOTION_API_KEY</div>
+            <div>3. Share the database with the Integration</div>
+          </div>
         </div>
       </div>
     </div>

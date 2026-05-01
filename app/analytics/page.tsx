@@ -665,17 +665,22 @@ export default function AnalyticsPage() {
     <div className="p-6 space-y-5">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pb-1" style={{ borderBottom: '1px solid var(--border-color)' }}>
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Analytics</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+          <h1
+            className="font-bold"
+            style={{ fontSize: 22, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.2 }}
+          >
+            Analytics
+          </h1>
+          <p style={{ fontSize: 12, marginTop: 4, color: 'var(--text-secondary)', letterSpacing: '0.01em' }}>
             הצלבת נתונים — {actual.length} עסקאות
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-4" style={{ fontSize: 11 }}>
           {([['var(--green)', '≥60%'], ['var(--yellow)', '40–60%'], ['var(--red)', '<40%']] as const).map(([c, l]) => (
             <div key={l} className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full" style={{ background: c }} />
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)' }}>{l}</span>
             </div>
           ))}
@@ -686,9 +691,15 @@ export default function AnalyticsPage() {
       <DataExplorer trades={actual} />
 
       {/* ═══ NEWS IMPACT ═══ */}
-      <div className="rounded-xl p-5 space-y-4"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-        <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>News Impact</div>
+      <div
+        className="rounded-2xl p-5 space-y-4"
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>News Impact</div>
 
         {/* Trigger button */}
         <div>
@@ -802,9 +813,15 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ═══ TIME OF DAY ═══ */}
-      <div className="rounded-xl p-5 space-y-4"
-        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-        <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Time of Day Analysis</div>
+      <div
+        className="rounded-2xl p-5 space-y-4"
+        style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Time of Day Analysis</div>
 
         {timeAnalysis.bucketData.length === 0 ? (
           <div className="flex items-center justify-center h-40 text-sm"

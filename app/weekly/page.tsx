@@ -189,14 +189,21 @@ export default function WeeklyPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center space-y-3">
-          <div
-            className="w-8 h-8 border-2 rounded-full animate-spin mx-auto"
-            style={{ borderColor: 'var(--border-hover)', borderTopColor: 'var(--blue)' }}
-          />
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading...</div>
+      <div className="p-6 space-y-5">
+        <div style={{ paddingBottom: 8, borderBottom: '1px solid var(--border-color)' }}>
+          <div className="skeleton" style={{ height: 24, width: 120, borderRadius: 8 }} />
+          <div className="skeleton" style={{ height: 14, width: 180, borderRadius: 6, marginTop: 8 }} />
         </div>
+        <div className="skeleton" style={{ height: 40, width: 540, maxWidth: '100%', borderRadius: 12 }} />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ borderRadius: '1.25rem', padding: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="skeleton" style={{ borderRadius: 'calc(1.25rem - 5px)', height: 76 }} />
+            </div>
+          ))}
+        </div>
+        <div className="skeleton" style={{ borderRadius: 16, height: 200 }} />
+        <div className="skeleton" style={{ borderRadius: 16, height: 300 }} />
       </div>
     );
   }
@@ -205,33 +212,58 @@ export default function WeeklyPage() {
     <div className="p-6 space-y-5">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Recap</h1>
-        <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>{periodLabel}</p>
+      <div className="pb-1" style={{ borderBottom: '1px solid var(--border-color)' }}>
+        <h1
+          className="font-bold"
+          style={{ fontSize: 22, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.2 }}
+        >
+          Recap
+        </h1>
+        <p style={{ fontSize: 12, marginTop: 4, color: 'var(--text-secondary)', letterSpacing: '0.01em' }}>
+          {periodLabel}
+        </p>
       </div>
 
       {/* Range selector */}
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl w-fit"
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-          {PRESETS.map((r) => (
-            <button key={r}
-              onClick={() => { setMode('preset'); setRange(r); }}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{
-                background: mode === 'preset' && range === r ? 'var(--blue)' : 'transparent',
-                color: mode === 'preset' && range === r ? 'white' : 'var(--text-secondary)',
-              }}>
-              {DATE_RANGE_LABELS[r]}
-            </button>
-          ))}
+        <div
+          className="flex flex-wrap items-center gap-0.5 p-1 rounded-xl w-fit"
+          style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.2)',
+          }}
+        >
+          {PRESETS.map((r) => {
+            const isActive = mode === 'preset' && range === r;
+            return (
+              <button
+                key={r}
+                onClick={() => { setMode('preset'); setRange(r); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                style={{
+                  background: isActive ? 'var(--blue)' : 'transparent',
+                  color: isActive ? 'white' : 'var(--text-secondary)',
+                  fontWeight: isActive ? 600 : 400,
+                  transition: 'all 160ms var(--ease-out)',
+                  boxShadow: isActive ? '0 1px 4px rgba(59,130,246,0.3)' : 'none',
+                }}
+              >
+                {DATE_RANGE_LABELS[r]}
+              </button>
+            );
+          })}
           <button
             onClick={() => setMode('custom')}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium"
             style={{
               background: mode === 'custom' ? 'var(--purple)' : 'transparent',
               color: mode === 'custom' ? 'white' : 'var(--text-secondary)',
-            }}>
+              fontWeight: mode === 'custom' ? 600 : 400,
+              transition: 'all 160ms var(--ease-out)',
+              boxShadow: mode === 'custom' ? '0 1px 4px rgba(124,58,237,0.3)' : 'none',
+            }}
+          >
             תאריך מותאם
           </button>
         </div>
@@ -275,40 +307,59 @@ export default function WeeklyPage() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-secondary)' }}>Total PNL</div>
-              <div className="text-2xl font-bold" style={{ color: stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                {formatPnl(stats.totalPnl)}
+            {/* Total PNL */}
+            <div style={{ borderRadius: '1.25rem', padding: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
+              <div style={{ borderRadius: 'calc(1.25rem - 5px)', padding: '14px 18px 16px', background: 'var(--bg-card)', borderTop: `2px solid ${stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)'}`, boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 7 }}>Total PNL</div>
+                <div className="tabular" style={{ fontSize: 24, fontWeight: 700, color: stats.totalPnl >= 0 ? 'var(--green)' : 'var(--red)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                  {formatPnl(stats.totalPnl)}
+                </div>
               </div>
             </div>
-            <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-secondary)' }}>Win Rate</div>
-              <div className="text-2xl font-bold" style={{ color: stats.winRate >= 50 ? 'var(--green)' : 'var(--red)' }}>
-                {stats.winRate.toFixed(1)}%
+            {/* Win Rate */}
+            <div style={{ borderRadius: '1.25rem', padding: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
+              <div style={{ borderRadius: 'calc(1.25rem - 5px)', padding: '14px 18px 16px', background: 'var(--bg-card)', borderTop: `2px solid ${stats.winRate >= 50 ? 'var(--green)' : 'var(--red)'}`, boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 7 }}>Win Rate</div>
+                <div className="tabular" style={{ fontSize: 24, fontWeight: 700, color: stats.winRate >= 50 ? 'var(--green)' : 'var(--red)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                  {stats.winRate.toFixed(1)}%
+                </div>
               </div>
             </div>
-            <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-secondary)' }}>Trades</div>
-              <div className="text-2xl font-bold" style={{ color: 'var(--blue)' }}>{stats.tradedDays}</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                {stats.wins}W / {stats.losses}L / {stats.breakevens}BE
+            {/* Trades */}
+            <div style={{ borderRadius: '1.25rem', padding: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
+              <div style={{ borderRadius: 'calc(1.25rem - 5px)', padding: '14px 18px 16px', background: 'var(--bg-card)', borderTop: '2px solid var(--blue)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 7 }}>Trades</div>
+                <div className="tabular" style={{ fontSize: 24, fontWeight: 700, color: 'var(--blue)', letterSpacing: '-0.03em', lineHeight: 1 }}>{stats.tradedDays}</div>
+                <div className="tabular" style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 5, letterSpacing: '-0.01em' }}>
+                  {stats.wins}W / {stats.losses}L / {stats.breakevens}BE
+                </div>
               </div>
             </div>
-            <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-secondary)' }}>Wins / Losses</div>
-              <div className="text-2xl font-bold" style={{ color: 'var(--green)' }}>
-                {formatPnl(periodTrades.filter((t) => t.winLose.includes('win')).reduce((s, t) => s + (t.pnl ?? 0), 0))}
-              </div>
-              <div className="text-2xl font-bold" style={{ color: 'var(--red)' }}>
-                {formatPnl(periodTrades.filter((t) => t.winLose.includes('lose')).reduce((s, t) => s + (t.pnl ?? 0), 0))}
+            {/* Wins / Losses */}
+            <div style={{ borderRadius: '1.25rem', padding: 5, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
+              <div style={{ borderRadius: 'calc(1.25rem - 5px)', padding: '14px 18px 16px', background: 'var(--bg-card)', borderTop: '2px solid var(--border-hover)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 7 }}>Wins / Losses</div>
+                <div className="tabular" style={{ fontSize: 20, fontWeight: 700, color: 'var(--green)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>
+                  {formatPnl(periodTrades.filter((t) => t.winLose.includes('win')).reduce((s, t) => s + (t.pnl ?? 0), 0))}
+                </div>
+                <div className="tabular" style={{ fontSize: 20, fontWeight: 700, color: 'var(--red)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>
+                  {formatPnl(periodTrades.filter((t) => t.winLose.includes('lose')).reduce((s, t) => s + (t.pnl ?? 0), 0))}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Day-by-day grid — only for single-week views */}
           {isWeekView && (
-            <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-              <div className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>עסקאות השבוע</div>
+            <div
+              className="rounded-2xl p-5"
+              style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>עסקאות השבוע</div>
               <div className="grid grid-cols-5 gap-3">
                 {weekDays.map((day, idx) => {
                   const dayTrades = periodTrades.filter((t) => t.date === day);
@@ -351,8 +402,15 @@ export default function WeeklyPage() {
           )}
 
           {/* Trade Details Table */}
-          <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-            <div className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>פירוט עסקאות</div>
+          <div
+            className="rounded-2xl p-5"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>פירוט עסקאות</div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -399,7 +457,14 @@ export default function WeeklyPage() {
           </div>
 
           {/* AI Summary */}
-          <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+          <div
+            className="rounded-2xl p-5"
+            style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
+            }}
+          >
             {/* Free-text notes — shown when no trade notes exist */}
             {periodTrades.every((t) => !t.notes?.trim()) && (
               <div className="mb-5">
@@ -424,33 +489,49 @@ export default function WeeklyPage() {
             )}
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                     {summarySource === 'ai' ? 'AI Summary' : 'Period Summary'}
                   </div>
                   {summarySource && (
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                      background: summarySource === 'ai' ? 'var(--purple-dim)' : 'var(--blue-dim)',
-                      color: summarySource === 'ai' ? 'var(--purple)' : 'var(--blue)',
-                      border: `1px solid ${summarySource === 'ai' ? 'rgba(124,58,237,0.3)' : 'rgba(59,130,246,0.25)'}`,
-                    }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        background: summarySource === 'ai' ? 'var(--purple-dim)' : 'var(--blue-dim)',
+                        color: summarySource === 'ai' ? 'var(--purple)' : 'var(--blue)',
+                        border: `1px solid ${summarySource === 'ai' ? 'rgba(124,58,237,0.28)' : 'rgba(59,130,246,0.22)'}`,
+                      }}
+                    >
                       {summarySource === 'ai' ? 'Gemini 2.5 Flash' : 'Statistical'}
                     </span>
                   )}
                 </div>
-                <div className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: 11, marginTop: 3, color: 'var(--text-secondary)' }}>
                   ניתוח אוטומטי לתקופה: {periodLabel}
                 </div>
               </div>
               <button
                 onClick={generateSummary}
                 disabled={summaryLoading || periodTrades.length === 0}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
                 style={{
+                  padding: '9px 18px',
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
                   background: 'var(--blue)',
                   color: 'white',
+                  border: 'none',
                   cursor: summaryLoading ? 'wait' : 'pointer',
+                  opacity: summaryLoading || periodTrades.length === 0 ? 0.45 : 1,
+                  transition: 'all 160ms var(--ease-out)',
+                  boxShadow: '0 1px 0 rgba(255,255,255,0.08) inset, 0 3px 12px rgba(59,130,246,0.18)',
                 }}
+                onMouseDown={(e) => { if (!summaryLoading) e.currentTarget.style.transform = 'scale(0.97) translateY(1px)'; }}
+                onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; }}
               >
                 {summaryLoading ? 'Generating...' : 'Generate'}
               </button>
@@ -464,12 +545,23 @@ export default function WeeklyPage() {
             )}
 
             {summaryLoading && !summary && (
-              <div className="flex flex-col items-center justify-center py-10 gap-3">
-                <div
-                  className="w-6 h-6 border-2 rounded-full animate-spin"
-                  style={{ borderColor: 'var(--border-hover)', borderTopColor: 'var(--purple)' }}
-                />
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Gemini מנתח...</div>
+              <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[0, 1, 2].map((i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--purple)',
+                        opacity: 0.7,
+                        animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Gemini מנתח...</div>
               </div>
             )}
 
