@@ -76,7 +76,7 @@ body {
 }
 
 .tabular {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
