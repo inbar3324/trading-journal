@@ -72,6 +72,7 @@ body {
   margin: 0;
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;
+  font-feature-settings: "zero" 0;
 }
 
 .tabular {
