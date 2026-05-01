@@ -7,7 +7,8 @@ export async function GET(request: Request) {
     const trades = await getAllTrades({ key, dbId });
     return Response.json({ trades });
   } catch (err) {
-    console.error('Notion fetch error:', err);
-    return Response.json({ error: 'Failed to fetch trades from Notion' }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Notion fetch error:', message);
+    return Response.json({ error: message }, { status: 500 });
   }
 }
