@@ -306,6 +306,7 @@ export default function JournalPage() {
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit' | null>(null);
   const [saving, setSaving] = useState(false);
   const [filePropNames, setFilePropNames] = useState<string[]>([]);
+  const [realDbId, setRealDbId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,6 +320,7 @@ export default function JournalPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setAllEntries([...(data.trades as Trade[])].reverse());
+      if (data.realDbId) setRealDbId(data.realDbId);
       setError(null);
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Failed to load');
@@ -439,7 +441,7 @@ export default function JournalPage() {
         const res = await fetch('/api/trades/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...headers },
-          body: JSON.stringify(input),
+          body: JSON.stringify(realDbId ? { ...input, realDbId } : input),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);

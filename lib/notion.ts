@@ -138,27 +138,16 @@ export async function getTrade(pageId: string, creds?: { key?: string; dbId?: st
   return parseTrade(page as Record<string, unknown>);
 }
 
-export async function createTrade(input: TradeInput, creds?: { key?: string; dbId?: string }): Promise<Trade> {
+export async function createTrade(
+  input: TradeInput,
+  creds?: { key?: string; dbId?: string },
+  realDbId?: string,
+): Promise<Trade> {
   const notion = makeClient(creds);
-  const dataSourceId = resolveDbId(creds);
-
-  // dataSources.query returns pages whose parent.database_id is the real Notion DB ID
-  // (different from the dataSource connector ID). Use the same sorts as getAllTrades
-  // so the query succeeds even for multi-source databases.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const probe = await (notion.dataSources as any).query({
-    data_source_id: dataSourceId,
-    page_size: 1,
-    sorts: [{ property: 'Date', direction: 'ascending' }],
-  });
-  const firstPage = probe.results?.[0] as Record<string, unknown> | undefined;
-  const realDbId =
-    ((firstPage?.parent as Record<string, unknown>)?.database_id as string | undefined)
-    ?? dataSourceId;
-
+  const dbId = realDbId ?? resolveDbId(creds);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const page = await (notion.pages as any).create({
-    parent: { database_id: realDbId },
+    parent: { database_id: dbId },
     properties: buildProperties(input),
   });
   return parseTrade(page as Record<string, unknown>);
@@ -242,12 +231,13 @@ export async function getSchema(creds?: { key?: string; dbId?: string }): Promis
   return {};
 }
 
-export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<Trade[]> {
+export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<{ trades: Trade[]; realDbId: string }> {
   const notion = makeClient(creds);
   const dataSourceId = resolveDbId(creds);
 
   const trades: Trade[] = [];
   let cursor: string | undefined;
+  let realDbId = dataSourceId;
 
   do {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -263,11 +253,15 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
       const p = page as Record<string, unknown>;
       if (p.properties) {
         trades.push(parseTrade(p));
+        if (realDbId === dataSourceId) {
+          const parentDbId = (p.parent as Record<string, unknown>)?.database_id as string | undefined;
+          if (parentDbId) realDbId = parentDbId;
+        }
       }
     }
 
     cursor = (res.next_cursor as string | null) ?? undefined;
   } while (cursor);
 
-  return trades;
+  return { trades, realDbId };
 }
