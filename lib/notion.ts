@@ -138,9 +138,22 @@ export async function getTrade(pageId: string, creds?: { key?: string; dbId?: st
   return parseTrade(page as Record<string, unknown>);
 }
 
+async function getRealDbId(creds?: { key?: string; dbId?: string }): Promise<string> {
+  const notion = makeClient(creds);
+  const dataSourceId = resolveDbId(creds);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (notion.dataSources as any).query({ data_source_id: dataSourceId, page_size: 1 });
+    const first = res.results?.[0] as Record<string, unknown> | undefined;
+    const parentDbId = (first?.parent as Record<string, unknown>)?.database_id as string | undefined;
+    if (parentDbId) return parentDbId;
+  } catch { /* fall through */ }
+  return dataSourceId;
+}
+
 export async function createTrade(input: TradeInput, creds?: { key?: string; dbId?: string }): Promise<Trade> {
   const notion = makeClient(creds);
-  const dbId = resolveDbId(creds);
+  const dbId = await getRealDbId(creds);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const page = await (notion.pages as any).create({
     parent: { database_id: dbId },
