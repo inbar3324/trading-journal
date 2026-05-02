@@ -138,25 +138,27 @@ export async function getTrade(pageId: string, creds?: { key?: string; dbId?: st
   return parseTrade(page as Record<string, unknown>);
 }
 
-async function getRealDbId(creds?: { key?: string; dbId?: string }): Promise<string> {
-  const notion = makeClient(creds);
-  const dataSourceId = resolveDbId(creds);
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await (notion.dataSources as any).query({ data_source_id: dataSourceId, page_size: 1 });
-    const first = res.results?.[0] as Record<string, unknown> | undefined;
-    const parentDbId = (first?.parent as Record<string, unknown>)?.database_id as string | undefined;
-    if (parentDbId) return parentDbId;
-  } catch { /* fall through */ }
-  return dataSourceId;
-}
-
 export async function createTrade(input: TradeInput, creds?: { key?: string; dbId?: string }): Promise<Trade> {
   const notion = makeClient(creds);
-  const dbId = await getRealDbId(creds);
+  const dataSourceId = resolveDbId(creds);
+
+  // dataSources.query returns pages whose parent.database_id is the real Notion DB ID
+  // (different from the dataSource connector ID). Use the same sorts as getAllTrades
+  // so the query succeeds even for multi-source databases.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const probe = await (notion.dataSources as any).query({
+    data_source_id: dataSourceId,
+    page_size: 1,
+    sorts: [{ property: 'Date', direction: 'ascending' }],
+  });
+  const firstPage = probe.results?.[0] as Record<string, unknown> | undefined;
+  const realDbId =
+    ((firstPage?.parent as Record<string, unknown>)?.database_id as string | undefined)
+    ?? dataSourceId;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const page = await (notion.pages as any).create({
-    parent: { database_id: dbId },
+    parent: { database_id: realDbId },
     properties: buildProperties(input),
   });
   return parseTrade(page as Record<string, unknown>);
