@@ -189,7 +189,7 @@ export async function createTrade(
   const norm = (id: string) => id.replace(/-/g, '').toLowerCase();
   const tried = new Set<string>();
 
-  // Creates a page in `id`. If Notion rejects unknown properties, strips them and retries once.
+  // Creates a page in `id`. If Notion rejects unknown properties, strips them and retries (up to 4x).
   const tryCreate = async (id: string): Promise<Trade> => {
     let props = buildProperties(input);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -197,18 +197,21 @@ export async function createTrade(
       parent: { database_id: id },
       properties: p,
     });
-    try {
-      return parseTrade(await doCreate(props));
-    } catch (e) {
-      if (!(e instanceof Error && e.message.includes('is not a property that exists'))) throw e;
-      // Parse "X is not a property that exists" from the error message
-      const invalid = new Set<string>();
-      const re = /([^.]+?) is not a property that exists/g;
-      let m;
-      while ((m = re.exec(e.message)) !== null) invalid.add(m[1].trim());
-      props = Object.fromEntries(Object.entries(props).filter(([k]) => !invalid.has(k)));
-      return parseTrade(await doCreate(props));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        return parseTrade(await doCreate(props));
+      } catch (e) {
+        if (!(e instanceof Error && e.message.includes('is not a property that exists'))) throw e;
+        const invalid = new Set<string>();
+        const re = /([^.]+?) is not a property that exists/g;
+        let m;
+        while ((m = re.exec(e.message)) !== null) invalid.add(m[1].trim());
+        if (invalid.size === 0) throw e;
+        // Use k.trim() so trailing-space prop names (e.g. "reversal/continuation ") still match
+        props = Object.fromEntries(Object.entries(props).filter(([k]) => !invalid.has(k.trim())));
+      }
     }
+    throw new Error('Could not create page after stripping invalid properties');
   };
 
   // Attempt 1: primary ID (will fail for multi-source connectors)
