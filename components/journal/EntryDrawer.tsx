@@ -381,7 +381,8 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  const isTrade = form.tookTrade.includes('TOOK TRADE');
+  const arr = (v: string[] | undefined) => v ?? [];
+  const isTrade = arr(form.tookTrade).includes('TOOK TRADE');
   const isOpen = mode !== null;
   const title = mode === 'create' ? 'New Entry' : form.date ?? 'Edit Entry';
 
@@ -422,7 +423,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
           </div>
           {mode === 'edit' && form.date && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-              {form.date} · {form.day[0] ?? ''}
+              {form.date} · {arr(form.day)[0] ?? ''}
             </div>
           )}
         </div>
@@ -459,10 +460,10 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
             </div>
             <div>
               <FieldLabel>Time</FieldLabel>
-              <TextInput value={form.time} onChange={(v) => setField('time', v)} placeholder="09:30" />
+              <TextInput value={form.time ?? ''} onChange={(v) => setField('time', v)} placeholder="09:30" />
             </div>
           </div>
-          {form.day[0] && (
+          {arr(form.day)[0] && (
             <div style={{ marginTop: 8 }}>
               <span
                 style={{
@@ -478,7 +479,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   border: '1px solid color-mix(in srgb, var(--blue) 22%, transparent)',
                 }}
               >
-                {form.day[0]}
+                {arr(form.day)[0]}
               </span>
             </div>
           )}
@@ -492,7 +493,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
               { value: 'TOOK TRADE', label: 'Took Trade', color: 'var(--green)' },
               { value: 'NO TRADE', label: 'No Trade', color: 'var(--blue)' },
             ]}
-            selected={form.tookTrade}
+            selected={arr(form.tookTrade)}
             onChange={(v) => setField('tookTrade', v)}
           />
         </div>
@@ -508,7 +509,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>Index</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'indices')}
-                    selected={form.indices}
+                    selected={arr(form.indices)}
                     onChange={(v) => setField('indices', v)}
                     color="var(--blue)"
                   />
@@ -520,7 +521,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                       { value: 'long', label: 'Long', color: 'var(--green)' },
                       { value: 'short', label: 'Short', color: 'var(--red)' },
                     ]}
-                    selected={form.longShort}
+                    selected={arr(form.longShort)}
                     onChange={(v) => setField('longShort', v)}
                   />
                 </div>
@@ -528,7 +529,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>Bias for the Day</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'BIAS FOR THE DAY')}
-                    selected={form.biasForTheDay}
+                    selected={arr(form.biasForTheDay)}
                     onChange={(v) => setField('biasForTheDay', v)}
                     color="var(--yellow)"
                     single
@@ -538,7 +539,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>Trend</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'TREND')}
-                    selected={form.trend}
+                    selected={arr(form.trend)}
                     onChange={(v) => setField('trend', v)}
                     color="var(--teal)"
                     single
@@ -548,7 +549,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>POI</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'POI')}
-                    selected={form.poi}
+                    selected={arr(form.poi)}
                     onChange={(v) => setField('poi', v)}
                     color="var(--purple)"
                   />
@@ -557,7 +558,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>Draw in Liquidity</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'draw in liquidity')}
-                    selected={form.drawInLiquidity}
+                    selected={arr(form.drawInLiquidity)}
                     onChange={(v) => setField('drawInLiquidity', v)}
                     color="var(--blue)"
                   />
@@ -566,7 +567,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>Reversal / Continuation</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'reversal/continuation ')}
-                    selected={form.reversalContinuation}
+                    selected={arr(form.reversalContinuation)}
                     onChange={(v) => setField('reversalContinuation', v)}
                     color="var(--teal)"
                     single
@@ -576,7 +577,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>LTF Entry</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'LOWER TIME ENTRY')}
-                    selected={form.lowerTimeEntry}
+                    selected={arr(form.lowerTimeEntry)}
                     onChange={(v) => setField('lowerTimeEntry', v)}
                     color="var(--purple)"
                   />
@@ -585,7 +586,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                   <FieldLabel>News</FieldLabel>
                   <ChipGroup
                     options={getOpts(schema, 'NEWS')}
-                    selected={form.news}
+                    selected={arr(form.news)}
                     onChange={(v) => setField('news', v)}
                     color="var(--yellow)"
                   />
@@ -605,7 +606,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                       { value: 'lose', label: 'Loss', color: 'var(--red)' },
                       { value: 'BRAKEVEN', label: 'BE', color: 'var(--yellow)' },
                     ]}
-                    selected={form.winLose}
+                    selected={arr(form.winLose)}
                     onChange={(v) => setField('winLose', v)}
                   />
                 </div>
@@ -653,7 +654,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                     <FieldLabel>Rating</FieldLabel>
                     <ChipGroup
                       options={getOpts(schema, 'RATE TRADE')}
-                      selected={form.rateTrade}
+                      selected={arr(form.rateTrade)}
                       onChange={(v) => setField('rateTrade', v)}
                       color="var(--green)"
                       single
@@ -671,7 +672,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
           <FieldLabel>Rules / Feelings</FieldLabel>
           <ChipGroup
             options={getOpts(schema, 'RULES/feeling')}
-            selected={form.rulesFeelings}
+            selected={arr(form.rulesFeelings)}
             onChange={(v) => setField('rulesFeelings', v)}
             color="var(--teal)"
           />
@@ -681,7 +682,7 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
         <div>
           <SectionTitle>Notes</SectionTitle>
           <textarea
-            value={form.notes}
+            value={form.notes ?? ''}
             onChange={(e) => setField('notes', e.target.value)}
             placeholder="What happened today? Thoughts on the setup, execution, emotions..."
             rows={5}
