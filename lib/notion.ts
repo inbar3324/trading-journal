@@ -125,7 +125,10 @@ function buildProperties(input: TradeInput): Record<string, unknown> {
   if (input.rateTrade !== undefined) p['RATE TRADE'] = ms(input.rateTrade);
   if (input.winLose !== undefined) p['win/lose'] = ms(input.winLose);
   if (input.pnl !== undefined) p['PNL'] = { number: input.pnl };
-  if (input.notes !== undefined) p['NOTES!'] = rt(input.notes ?? '');
+  if (input.notes !== undefined) {
+    const text = input.notes ?? '';
+    p['NOTES!'] = text ? { title: [{ text: { content: text } }] } : { title: [] };
+  }
   if (input.tradeIdeaLink !== undefined) p['TRADE  IDEA LINK'] = { url: input.tradeIdeaLink || null };
   if (input.oneMTradeLink !== undefined) p['1M trade link'] = { url: input.oneMTradeLink || null };
   return p;
@@ -186,69 +189,70 @@ export async function createTrade(
   const norm = (id: string) => id.replace(/-/g, '').toLowerCase();
   const tried = new Set<string>();
 
+  // Creates a page in `id`. If Notion rejects unknown properties, strips them and retries once.
   const tryCreate = async (id: string): Promise<Trade> => {
+    let props = buildProperties(input);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const page = await (notion.pages as any).create({
+    const doCreate = (p: Record<string, unknown>) => (notion.pages as any).create({
       parent: { database_id: id },
-      properties: buildProperties(input),
+      properties: p,
     });
-    return parseTrade(page as Record<string, unknown>);
+    try {
+      return parseTrade(await doCreate(props));
+    } catch (e) {
+      if (!(e instanceof Error && e.message.includes('is not a property that exists'))) throw e;
+      // Parse "X is not a property that exists" from the error message
+      const invalid = new Set<string>();
+      const re = /([^.]+?) is not a property that exists/g;
+      let m;
+      while ((m = re.exec(e.message)) !== null) invalid.add(m[1].trim());
+      props = Object.fromEntries(Object.entries(props).filter(([k]) => !invalid.has(k)));
+      return parseTrade(await doCreate(props));
+    }
   };
 
-  // Attempt 1: primary ID
+  // Attempt 1: primary ID (will fail for multi-source connectors)
   tried.add(norm(primaryId));
   try {
     return await tryCreate(primaryId);
   } catch (e) {
     if (!(e instanceof Error && e.message.includes('multiple data sources'))) throw e;
-    console.error('[createTrade] multi-source on primaryId:', primaryId);
   }
 
-  // Attempt 2: query the connector to find an actual source page, extract its parent DB
+  // Attempt 2: query the connector → extract parent DB IDs from real pages
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const qres = await (notion.dataSources as any).query({ data_source_id: dataSourceId, page_size: 5 });
     const pages: Array<Record<string, unknown>> = qres.results ?? [];
     const parentIds = new Set<string>();
     for (const p of pages) {
-      const fromQuery = (p.parent as Record<string, unknown>)?.database_id as string | undefined;
-      if (fromQuery) parentIds.add(fromQuery);
+      const id = (p.parent as Record<string, unknown>)?.database_id as string | undefined;
+      if (id) parentIds.add(id);
     }
-    // Also try pages.retrieve on the first page
     if (pages[0]) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const retrieved = await (notion.pages as any).retrieve({ page_id: pages[0].id as string }) as Record<string, unknown>;
-        const fromRetrieve = (retrieved.parent as Record<string, unknown>)?.database_id as string | undefined;
-        if (fromRetrieve) parentIds.add(fromRetrieve);
+        const r = await (notion.pages as any).retrieve({ page_id: pages[0].id as string }) as Record<string, unknown>;
+        const id = (r.parent as Record<string, unknown>)?.database_id as string | undefined;
+        if (id) parentIds.add(id);
       } catch { /* ignore */ }
     }
-    console.error('[createTrade] parent IDs from pages:', [...parentIds]);
     for (const id of parentIds) {
       if (tried.has(norm(id))) continue;
       tried.add(norm(id));
-      try { return await tryCreate(id); } catch (err) {
-        console.error('[createTrade] failed on parentId:', id, String(err));
-      }
+      try { return await tryCreate(id); } catch { /* try next */ }
     }
-  } catch (err) { console.error('[createTrade] dataSources.query failed:', String(err)); }
+  } catch { /* ignore */ }
 
-  // Attempt 3: search ALL accessible databases and try each
+  // Attempt 3: search all accessible databases (journal DBs first)
   const key = creds?.key ?? process.env.NOTION_API_KEY ?? '';
-  const searchCandidates = await searchAllDbIds(key, tried);
-  console.error('[createTrade] search candidates:', searchCandidates);
-  for (const id of searchCandidates) {
+  for (const id of await searchAllDbIds(key, tried)) {
     if (tried.has(norm(id))) continue;
     tried.add(norm(id));
-    try { return await tryCreate(id); } catch (err) {
-      console.error('[createTrade] failed on searchId:', id, String(err));
-    }
+    try { return await tryCreate(id); } catch { /* try next */ }
   }
 
-  throw new Error(
-    `Cannot create entry: all ${tried.size} database(s) tried returned "multiple data sources". ` +
-    `Share the underlying Notion database(s) with your integration, then retry.`
-  );
+  throw new Error('Cannot create journal entry: all accessible Notion databases were tried and failed.');
 }
 
 export async function updateTrade(pageId: string, input: TradeInput, creds?: { key?: string; dbId?: string }): Promise<Trade> {
