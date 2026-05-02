@@ -138,6 +138,46 @@ export async function getTrade(pageId: string, creds?: { key?: string; dbId?: st
   return parseTrade(page as Record<string, unknown>);
 }
 
+async function findWritableDbCandidates(key: string, excludeIds: string[]): Promise<string[]> {
+  const headers = {
+    Authorization: `Bearer ${key}`,
+    'Notion-Version': '2022-06-28',
+    'Content-Type': 'application/json',
+  };
+  const norm = (id: string) => id.replace(/-/g, '').toLowerCase();
+  const excluded = new Set(excludeIds.map(norm));
+  const candidates: string[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const body: Record<string, unknown> = { filter: { property: 'object', value: 'database' }, page_size: 100 };
+    if (cursor) body.start_cursor = cursor;
+    try {
+      const res = await fetch('https://api.notion.com/v1/search', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) break;
+      const data = await res.json() as Record<string, unknown>;
+      const results = (data.results as Array<Record<string, unknown>>) ?? [];
+      for (const db of results) {
+        const id = db.id as string;
+        if (excluded.has(norm(id))) continue;
+        const props = db.properties as Record<string, unknown> | undefined;
+        if (!props) continue;
+        const vals = Object.values(props) as Array<Record<string, unknown>>;
+        const hasDate = vals.some((p) => p?.type === 'date');
+        const hasNumber = vals.some((p) => p?.type === 'number');
+        if (hasDate && hasNumber) candidates.push(id);
+      }
+      cursor = (data.next_cursor as string | null) ?? undefined;
+    } catch { break; }
+  } while (cursor);
+
+  return candidates;
+}
+
 export async function createTrade(
   input: TradeInput,
   creds?: { key?: string; dbId?: string },
@@ -145,12 +185,29 @@ export async function createTrade(
 ): Promise<Trade> {
   const notion = makeClient(creds);
   const dbId = realDbId ?? resolveDbId(creds);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const page = await (notion.pages as any).create({
-    parent: { database_id: dbId },
-    properties: buildProperties(input),
-  });
-  return parseTrade(page as Record<string, unknown>);
+
+  const tryCreate = async (id: string): Promise<Trade> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page = await (notion.pages as any).create({
+      parent: { database_id: id },
+      properties: buildProperties(input),
+    });
+    return parseTrade(page as Record<string, unknown>);
+  };
+
+  try {
+    return await tryCreate(dbId);
+  } catch (e) {
+    if (!(e instanceof Error && e.message.includes('multiple data sources'))) throw e;
+    // The DB is a multi-source connector — search for the underlying writable database
+    const key = creds?.key ?? process.env.NOTION_API_KEY ?? '';
+    const dataSourceId = resolveDbId(creds);
+    const candidates = await findWritableDbCandidates(key, [dbId, dataSourceId]);
+    for (const id of candidates) {
+      try { return await tryCreate(id); } catch { continue; }
+    }
+    throw e;
+  }
 }
 
 export async function updateTrade(pageId: string, input: TradeInput, creds?: { key?: string; dbId?: string }): Promise<Trade> {
