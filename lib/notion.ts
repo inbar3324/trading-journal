@@ -339,11 +339,15 @@ export async function getSchema(creds?: { key?: string; dbId?: string }): Promis
 export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<{ trades: Trade[]; realDbId: string }> {
   const notion = makeClient(creds);
   const dataSourceId = resolveDbId(creds);
+  const key = creds?.key ?? process.env.NOTION_API_KEY ?? '';
+  const norm = (id: string) => id.replace(/-/g, '').toLowerCase();
 
-  const trades: Trade[] = [];
+  // Use a map to deduplicate by page ID (connector is authoritative; supplemental fills gaps)
+  const tradeMap = new Map<string, Trade>();
   let cursor: string | undefined;
   let firstPageId: string | undefined;
 
+  // Primary read: dataSources connector
   do {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await (notion.dataSources as any).query({
@@ -357,7 +361,8 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
     for (const page of results) {
       const p = page as Record<string, unknown>;
       if (p.properties) {
-        trades.push(parseTrade(p));
+        const trade = parseTrade(p);
+        tradeMap.set(trade.id, trade);
         if (!firstPageId) firstPageId = p.id as string;
       }
     }
@@ -365,8 +370,51 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
     cursor = (res.next_cursor as string | null) ?? undefined;
   } while (cursor);
 
-  // pages.retrieve returns the real parent.database_id — unlike dataSources results
-  // which may not expose it. This is the actual Notion DB UUID needed for pages.create.
+  // Supplemental read: also query accessible databases directly.
+  // createTrade falls back to these DBs when the connector is read-only,
+  // so pages written there won't appear in dataSources.query without this.
+  const notionHeaders = {
+    Authorization: `Bearer ${key}`,
+    'Notion-Version': '2022-06-28',
+    'Content-Type': 'application/json',
+  };
+  try {
+    const extraDbIds = await searchAllDbIds(key, new Set([norm(dataSourceId)]));
+    for (const dbId of extraDbIds) {
+      try {
+        let dbCursor: string | undefined;
+        do {
+          const body: Record<string, unknown> = { page_size: 100 };
+          if (dbCursor) body.start_cursor = dbCursor;
+          const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+            method: 'POST',
+            headers: notionHeaders,
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) break;
+          const data = await res.json() as Record<string, unknown>;
+          const results = (data.results as Array<Record<string, unknown>>) ?? [];
+          for (const page of results) {
+            const pageId = page.id as string;
+            if (!page.properties || tradeMap.has(pageId)) continue;
+            const trade = parseTrade(page);
+            // Only include pages that have a date (avoids polluting with unrelated DB entries)
+            if (trade.date) tradeMap.set(pageId, trade);
+          }
+          dbCursor = (data.next_cursor as string | null) ?? undefined;
+        } while (dbCursor);
+      } catch { /* ignore unavailable db */ }
+    }
+  } catch { /* ignore search failures */ }
+
+  const trades = [...tradeMap.values()].sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date.localeCompare(b.date);
+  });
+
+  // pages.retrieve returns the real parent.database_id needed for pages.create.
   let realDbId = dataSourceId;
   if (firstPageId) {
     try {
