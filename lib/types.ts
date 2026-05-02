@@ -52,3 +52,33 @@ export interface DashboardStats {
   bestTrade: number;
   worstTrade: number;
 }
+
+export interface TradeInput {
+  date?: string | null;
+  day?: string[];
+  time?: string;
+  tookTrade?: string[];
+  indices?: string[];
+  longShort?: string[];
+  news?: string[];
+  reversalContinuation?: string[];
+  drawInLiquidity?: string[];
+  poi?: string[];
+  lowerTimeEntry?: string[];
+  rulesFeelings?: string[];
+  trend?: string[];
+  biasForTheDay?: string[];
+  rateTrade?: string[];
+  winLose?: string[];
+  pnl?: number | null;
+  notes?: string;
+  tradeIdeaLink?: string | null;
+  oneMTradeLink?: string | null;
+}
+
+export interface FieldOption {
+  name: string;
+  color?: string;
+}
+
+export type NotionSchema = Record<string, FieldOption[]>;

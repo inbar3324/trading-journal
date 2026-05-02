@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, CalendarDays, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, BarChart2, CalendarDays, TrendingUp, BookOpen } from 'lucide-react';
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/journal', icon: BookOpen, label: 'Journal' },
   { href: '/analytics', icon: BarChart2, label: 'Analytics' },
   { href: '/weekly', icon: CalendarDays, label: 'Recap' },
 ];
