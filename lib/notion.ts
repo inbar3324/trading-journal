@@ -237,7 +237,7 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
 
   const trades: Trade[] = [];
   let cursor: string | undefined;
-  let realDbId = dataSourceId;
+  let firstPageId: string | undefined;
 
   do {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -253,15 +253,24 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
       const p = page as Record<string, unknown>;
       if (p.properties) {
         trades.push(parseTrade(p));
-        if (realDbId === dataSourceId) {
-          const parentDbId = (p.parent as Record<string, unknown>)?.database_id as string | undefined;
-          if (parentDbId) realDbId = parentDbId;
-        }
+        if (!firstPageId) firstPageId = p.id as string;
       }
     }
 
     cursor = (res.next_cursor as string | null) ?? undefined;
   } while (cursor);
+
+  // pages.retrieve returns the real parent.database_id — unlike dataSources results
+  // which may not expose it. This is the actual Notion DB UUID needed for pages.create.
+  let realDbId = dataSourceId;
+  if (firstPageId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const page = await (notion.pages as any).retrieve({ page_id: firstPageId }) as Record<string, unknown>;
+      const parentDbId = (page.parent as Record<string, unknown>)?.database_id as string | undefined;
+      if (parentDbId) realDbId = parentDbId;
+    } catch { /* fall through — keep dataSourceId as fallback */ }
+  }
 
   return { trades, realDbId };
 }
