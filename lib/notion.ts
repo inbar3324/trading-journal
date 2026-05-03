@@ -3,6 +3,10 @@ import type { Trade, TradeInput, NotionSchema } from './types';
 
 const DEFAULT_DB_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
 
+// Tracks the last DB that createTrade successfully wrote to (per process instance).
+// getAllTrades uses this to query it directly, even if search misses it.
+let _lastWritableDbId: string | null = null;
+
 function multiSelect(prop: unknown): string[] {
   if (!prop || typeof prop !== 'object') return [];
   const p = prop as Record<string, unknown>;
@@ -252,7 +256,11 @@ export async function createTrade(
   for (const id of await searchAllDbIds(key, tried)) {
     if (tried.has(norm(id))) continue;
     tried.add(norm(id));
-    try { return await tryCreate(id); } catch { /* try next */ }
+    try {
+      const trade = await tryCreate(id);
+      _lastWritableDbId = id; // remember for getAllTrades supplemental read
+      return trade;
+    } catch { /* try next */ }
   }
 
   throw new Error('Cannot create journal entry: all accessible Notion databases were tried and failed.');
@@ -378,32 +386,44 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
     'Notion-Version': '2022-06-28',
     'Content-Type': 'application/json',
   };
+  const querySupplementalDb = async (dbId: string) => {
+    let dbCursor: string | undefined;
+    do {
+      const body: Record<string, unknown> = { page_size: 100 };
+      if (dbCursor) body.start_cursor = dbCursor;
+      const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+        method: 'POST',
+        headers: notionHeaders,
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) break;
+      const data = await res.json() as Record<string, unknown>;
+      const results = (data.results as Array<Record<string, unknown>>) ?? [];
+      for (const page of results) {
+        const pageId = page.id as string;
+        if (tradeMap.has(pageId)) continue;
+        const props = page.properties as Record<string, unknown> | undefined;
+        // Include only if this looks like a journal DB (has NOTES! or Date property)
+        if (props && ('NOTES!' in props || 'Date' in props)) {
+          tradeMap.set(pageId, parseTrade(page));
+        }
+      }
+      dbCursor = (data.next_cursor as string | null) ?? undefined;
+    } while (dbCursor);
+  };
+
+  // Always query the last DB we wrote to (fastest path, works even across search failures)
+  if (_lastWritableDbId && norm(_lastWritableDbId) !== norm(dataSourceId)) {
+    try { await querySupplementalDb(_lastWritableDbId); } catch { /* ignore */ }
+  }
+
+  // Also search for any other accessible databases
   try {
-    const extraDbIds = await searchAllDbIds(key, new Set([norm(dataSourceId)]));
+    const excludeNorm = new Set([norm(dataSourceId)]);
+    if (_lastWritableDbId) excludeNorm.add(norm(_lastWritableDbId));
+    const extraDbIds = await searchAllDbIds(key, excludeNorm);
     for (const dbId of extraDbIds) {
-      try {
-        let dbCursor: string | undefined;
-        do {
-          const body: Record<string, unknown> = { page_size: 100 };
-          if (dbCursor) body.start_cursor = dbCursor;
-          const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-            method: 'POST',
-            headers: notionHeaders,
-            body: JSON.stringify(body),
-          });
-          if (!res.ok) break;
-          const data = await res.json() as Record<string, unknown>;
-          const results = (data.results as Array<Record<string, unknown>>) ?? [];
-          for (const page of results) {
-            const pageId = page.id as string;
-            if (!page.properties || tradeMap.has(pageId)) continue;
-            const trade = parseTrade(page);
-            // Only include pages that have a date (avoids polluting with unrelated DB entries)
-            if (trade.date) tradeMap.set(pageId, trade);
-          }
-          dbCursor = (data.next_cursor as string | null) ?? undefined;
-        } while (dbCursor);
-      } catch { /* ignore unavailable db */ }
+      try { await querySupplementalDb(dbId); } catch { /* ignore unavailable db */ }
     }
   } catch { /* ignore search failures */ }
 
