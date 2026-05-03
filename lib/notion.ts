@@ -169,7 +169,8 @@ async function searchAllDbIds(key: string, excludeNorm: Set<string>): Promise<st
         const id = db.id as string;
         if (excludeNorm.has(norm(id))) continue;
         const props = db.properties as Record<string, unknown> | undefined;
-        if (!props) { rest.push(id); continue; }
+        // Only consider databases that have a NOTES! property (journal-specific field)
+        if (!props || !('NOTES!' in props)) continue;
         const vals = Object.values(props) as Array<Record<string, unknown>>;
         const hasDate = vals.some((p) => p?.type === 'date');
         const hasNumber = vals.some((p) => p?.type === 'number');

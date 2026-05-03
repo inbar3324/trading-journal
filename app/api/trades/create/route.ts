@@ -7,10 +7,13 @@ export async function POST(req: NextRequest) {
     const { realDbId, ...input } = body;
     const key = req.headers.get('x-notion-key') ?? undefined;
     const dbId = req.headers.get('x-notion-db') ?? undefined;
+    console.log('[create] input:', JSON.stringify({ notes: input.notes, date: input.date, realDbId }));
     const trade = await createTrade(input, { key, dbId }, realDbId as string | undefined);
+    console.log('[create] success → trade.id:', trade.id, 'notes:', trade.notes);
     return NextResponse.json({ trade });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
+    console.error('[create] FAILED:', msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
