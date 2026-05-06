@@ -450,6 +450,15 @@ export default function JournalPage() {
     setDrawerMode(null);
   }
 
+  function sortDesc(trades: Trade[]): Trade[] {
+    return [...trades].sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return b.date.localeCompare(a.date);
+    });
+  }
+
   async function handleSave(input: TradeInput) {
     setSaving(true);
     try {
@@ -461,7 +470,16 @@ export default function JournalPage() {
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
-        setAllEntries((prev) => [data.trade, ...prev]);
+        // Insert and sort by date descending so position is correct
+        setAllEntries((prev) => sortDesc([data.trade, ...prev]));
+        // Switch directly to edit mode so images can be uploaded immediately
+        setSelectedId(data.trade.id);
+        setDrawerMode('edit');
+        setFilePropNames([]);
+        fetch(`/api/trades/${data.trade.id}`, { headers })
+          .then((r) => r.json())
+          .then((d) => { if (d.filePropNames) setFilePropNames(d.filePropNames); })
+          .catch(() => {});
       } else if (drawerMode === 'edit' && selectedId) {
         const res = await fetch(`/api/trades/${selectedId}`, {
           method: 'PATCH',
@@ -471,8 +489,8 @@ export default function JournalPage() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         setAllEntries((prev) => prev.map((t) => (t.id === selectedId ? data.trade : t)));
+        closeDrawer();
       }
-      closeDrawer();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Save failed');
     } finally {
