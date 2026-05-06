@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Trade, TradeInput, NotionSchema } from '@/lib/types';
-import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
+import { getNotionConfig, saveNotionConfig, notionHeaders } from '@/lib/notion-config';
 import { Plus, RefreshCw } from 'lucide-react';
 import EntryDrawer from '@/components/journal/EntryDrawer';
 
@@ -320,7 +320,14 @@ export default function JournalPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setAllEntries([...(data.trades as Trade[])].reverse());
-      if (data.realDbId) setRealDbId(data.realDbId);
+      if (data.realDbId) {
+        setRealDbId(data.realDbId);
+        // Persist so the next session starts with realDbId already known
+        const cfg = getNotionConfig();
+        if (cfg && cfg.realDbId !== data.realDbId) {
+          saveNotionConfig({ ...cfg, realDbId: data.realDbId });
+        }
+      }
       setError(null);
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Failed to load');
@@ -332,18 +339,27 @@ export default function JournalPage() {
 
   const fetchSchema = useCallback(async () => {
     try {
-      const res = await fetch('/api/notion/schema', { headers });
+      const schemaHeaders: Record<string, string> = { ...headers };
+      if (realDbId) schemaHeaders['x-notion-realdb'] = realDbId;
+      const res = await fetch('/api/notion/schema', { headers: schemaHeaders });
       const data = await res.json();
       if (data.schema) setSchema(data.schema);
     } catch {}
-  }, [headers]);
+  // realDbId intentionally included: re-fetch schema once realDbId is known
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers, realDbId]);
 
+  // Fetch entries on mount and poll every 30s
   useEffect(() => {
     fetchEntries();
-    fetchSchema();
     pollRef.current = setInterval(() => fetchEntries(true), 30_000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchEntries, fetchSchema]);
+  }, [fetchEntries]);
+
+  // Fetch schema once realDbId is available (re-runs when realDbId is first discovered)
+  useEffect(() => {
+    fetchSchema();
+  }, [fetchSchema]);
 
   const derivedSchema = useMemo((): NotionSchema => {
     const fieldMap: Array<[keyof Trade, string]> = [

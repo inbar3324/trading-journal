@@ -1,6 +1,7 @@
 export interface NotionConfig {
   key: string;
   dbId: string;
+  realDbId?: string;
 }
 
 const STORAGE_KEY = 'tj_notion';
@@ -27,5 +28,7 @@ export function clearNotionConfig(): void {
 
 export function notionHeaders(cfg: NotionConfig | null): Record<string, string> {
   if (!cfg) return {};
-  return { 'x-notion-key': cfg.key, 'x-notion-db': cfg.dbId };
+  const h: Record<string, string> = { 'x-notion-key': cfg.key, 'x-notion-db': cfg.dbId };
+  if (cfg.realDbId) h['x-notion-realdb'] = cfg.realDbId;
+  return h;
 }

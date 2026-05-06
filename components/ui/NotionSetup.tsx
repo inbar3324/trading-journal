@@ -41,9 +41,7 @@ export default function NotionSetup({ onSave }: Props) {
       if (dbs.length === 0) {
         throw new Error('לא נמצאו Databases — וודא שחיברת את ה-Integration לפחות ל-Database אחד ב-Notion');
       } else if (dbs.length === 1) {
-        const cfg = { key: k, dbId: dbs[0].id };
-        saveNotionConfig(cfg);
-        onSave(cfg);
+        await saveWithRealDb(k, dbs[0].id);
       } else {
         setDatabases(dbs);
         setStep('db');
@@ -58,10 +56,24 @@ export default function NotionSetup({ onSave }: Props) {
     }
   }
 
-  function handleSelectDb(db: DbOption) {
-    const cfg = { key: key.trim(), dbId: db.id };
+  async function saveWithRealDb(k: string, dbId: string) {
+    let realDbId: string | undefined;
+    try {
+      const res = await fetch('/api/notion/discover-realdb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: k, dbId }),
+      });
+      const data = await res.json();
+      if (data.realDbId) realDbId = data.realDbId;
+    } catch { /* proceed without realDbId — app will discover it on first load */ }
+    const cfg = { key: k, dbId, realDbId };
     saveNotionConfig(cfg);
     onSave(cfg);
+  }
+
+  function handleSelectDb(db: DbOption) {
+    saveWithRealDb(key.trim(), db.id);
   }
 
   return (
