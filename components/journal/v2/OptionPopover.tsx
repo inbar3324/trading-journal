@@ -33,14 +33,19 @@ export function OptionPopover({ anchorRect, options, selected, multi, allowCreat
   }, [onClose]);
 
   const minWidth = Math.max(anchorRect.width, 240);
-  const top = anchorRect.bottom + 4;
+  const MAX_H = 320;
+  const spaceBelow = window.innerHeight - anchorRect.bottom - 8;
+  const spaceAbove = anchorRect.top - 8;
+  const showAbove = spaceBelow < MAX_H && spaceAbove > spaceBelow;
+  const maxHeight = showAbove ? Math.min(MAX_H, spaceAbove) : Math.min(MAX_H, spaceBelow);
+  const top = showAbove ? anchorRect.top - Math.min(maxHeight, spaceAbove) - 4 : anchorRect.bottom + 4;
   const left = Math.min(anchorRect.left, window.innerWidth - minWidth - 16);
   const filtered = options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
   const exactExists = options.some(o => o.name.toLowerCase() === search.toLowerCase());
 
   return (
     <div ref={ref} onClick={e => e.stopPropagation()} style={{
-      position: 'fixed', top, left, minWidth, maxHeight: 320, zIndex: 1000,
+      position: 'fixed', top, left, minWidth, maxHeight, zIndex: 1000,
       background: 'var(--bg-elevated)', border: '1px solid var(--border-color)',
       borderRadius: 6, boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
       display: 'flex', flexDirection: 'column', overflow: 'hidden',

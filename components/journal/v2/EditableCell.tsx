@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ExternalLink, Plus, Check } from 'lucide-react';
+import { ExternalLink, Plus, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { NotionPropDef, NotionPropValue, SelectOption, FileRef } from '@/lib/notion-page';
 import { tagBg, tagFg } from './colors';
 import { OptionPopover } from './OptionPopover';
@@ -28,9 +28,11 @@ const READONLY_TYPES = new Set([
 export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit, autoFocus }: Props) {
   const [editing, setEditing] = useState(!!initialEdit);
   const [popRect, setPopRect] = useState<DOMRect | null>(null);
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const readOnly = READONLY_TYPES.has(prop.type);
+  const files = value.type === 'files' ? value.files : [];
 
   function startEdit(e: React.MouseEvent) {
     if (readOnly) return;
@@ -40,7 +42,6 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit,
       return;
     }
     if (prop.type === 'checkbox') {
-      // Direct toggle, no edit mode
       e.preventDefault();
       onCommit({ type: 'checkbox', value: !(value.type === 'checkbox' ? value.value : false) });
       return;
@@ -48,18 +49,48 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit,
     setEditing(true);
   }
 
+  // ── Lightbox ───────────────────────────────────────────────────────────────
+  const lightbox = lightboxIdx !== null && files.length > 0 ? createPortal(
+    <div onClick={() => setLightboxIdx(null)}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <button onClick={() => setLightboxIdx(null)}
+        style={{ position: 'fixed', top: 16, right: 16, background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <X size={18} />
+      </button>
+      {files.length > 1 && (
+        <>
+          <button onClick={e => { e.stopPropagation(); setLightboxIdx((lightboxIdx - 1 + files.length) % files.length); }}
+            style={{ position: 'fixed', left: 16, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ChevronLeft size={22} />
+          </button>
+          <button onClick={e => { e.stopPropagation(); setLightboxIdx((lightboxIdx + 1) % files.length); }}
+            style={{ position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ChevronRight size={22} />
+          </button>
+        </>
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={files[lightboxIdx].url} alt="" onClick={e => e.stopPropagation()}
+        style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 6, boxShadow: '0 8px 48px rgba(0,0,0,0.8)' }} />
+    </div>,
+    document.body
+  ) : null;
+
   // ── Display mode ───────────────────────────────────────────────────────────
   if (!editing && !popRect) {
     return (
-      <div ref={containerRef} onClick={startEdit}
-        style={{
-          width: '100%', minHeight: 22,
-          cursor: readOnly ? 'default' : 'pointer',
-          display: 'flex', alignItems: 'center',
-        }}
-      >
-        <DisplayValue value={value} />
-      </div>
+      <>
+        {lightbox}
+        <div ref={containerRef} onClick={startEdit}
+          style={{
+            width: '100%', minHeight: 22,
+            cursor: readOnly ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center',
+          }}
+        >
+          <DisplayValue value={value} onImageClick={prop.type === 'files' ? (i) => setLightboxIdx(i) : undefined} />
+        </div>
+      </>
     );
   }
 
@@ -129,7 +160,7 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit,
 // ─────────────────────────────────────────────────────────────────────────────
 // Read-only display (used inside cells and detail views)
 // ─────────────────────────────────────────────────────────────────────────────
-function DisplayValue({ value }: { value: NotionPropValue }) {
+function DisplayValue({ value, onImageClick }: { value: NotionPropValue; onImageClick?: (idx: number) => void }) {
   switch (value.type) {
     case 'title':
       return value.text
@@ -184,7 +215,8 @@ function DisplayValue({ value }: { value: NotionPropValue }) {
         <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
           {value.files.slice(0, 3).map((f, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={f.url} alt="" style={{ width: 28, height: 22, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border-color)' }} />
+            <img key={i} src={f.url} alt="" onClick={onImageClick ? (e) => { e.stopPropagation(); onImageClick(i); } : undefined}
+              style={{ width: 28, height: 22, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border-color)', cursor: onImageClick ? 'zoom-in' : 'default' }} />
           ))}
           {value.files.length > 3 && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>+{value.files.length - 3}</span>}
         </div>
@@ -414,6 +446,21 @@ function FileUploader({
     finally { setUploading(false); onClose(); }
   }
 
+  // Paste image from clipboard
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imgItem = items.find(it => it.type.startsWith('image/'));
+      if (imgItem) {
+        e.preventDefault();
+        handleFile(imgItem.getAsFile());
+      }
+    }
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onUploadFile]);
+
   return (
     <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
       <button onClick={() => inputRef.current?.click()} disabled={uploading || !onUploadFile}
@@ -425,8 +472,10 @@ function FileUploader({
       >
         <Plus size={11} /> {uploading ? 'Uploading…' : 'Upload'}
       </button>
-      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{value.length} file{value.length === 1 ? '' : 's'}</span>
-      <input ref={inputRef} type="file" hidden onChange={e => handleFile(e.target.files?.[0])} />
+      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+        {value.length > 0 ? `${value.length} file${value.length === 1 ? '' : 's'}` : 'Ctrl+V to paste'}
+      </span>
+      <input ref={inputRef} type="file" accept="image/*" hidden onChange={e => handleFile(e.target.files?.[0])} />
     </div>
   );
 }
