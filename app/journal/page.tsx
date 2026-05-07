@@ -1,551 +1,201 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { Trade, TradeInput, NotionSchema } from '@/lib/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, RefreshCw, Table as TableIcon, Calendar, LayoutGrid, BarChart3, ChevronDown, X, Trash2 } from 'lucide-react';
+import type { NotionPage, NotionDbSchema, NotionPropDef, NotionPropValue } from '@/lib/notion-page';
 import { getNotionConfig, saveNotionConfig, notionHeaders } from '@/lib/notion-config';
-import { Plus, RefreshCw } from 'lucide-react';
-import EntryDrawer from '@/components/journal/EntryDrawer';
+import { EditableCell } from '@/components/journal/v2/EditableCell';
+import { colWidth } from '@/components/journal/v2/widths';
 
-type Filter = 'all' | 'trade' | 'notrade' | 'win' | 'loss' | 'be';
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const FILTER_OPTIONS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'trade', label: 'Took Trade' },
-  { key: 'notrade', label: 'No Trade' },
-  { key: 'win', label: 'Win' },
-  { key: 'loss', label: 'Loss' },
-  { key: 'be', label: 'BE' },
+function emptyValue(type: NotionPropDef['type']): NotionPropValue {
+  switch (type) {
+    case 'title': return { type: 'title', text: '' };
+    case 'rich_text': return { type: 'rich_text', text: '' };
+    case 'number': return { type: 'number', value: null };
+    case 'select': return { type: 'select', option: null };
+    case 'multi_select': return { type: 'multi_select', options: [] };
+    case 'status': return { type: 'status', option: null };
+    case 'date': return { type: 'date', start: null, end: null, hasTime: false };
+    case 'url': return { type: 'url', value: null };
+    case 'email': return { type: 'email', value: null };
+    case 'phone_number': return { type: 'phone_number', value: null };
+    case 'checkbox': return { type: 'checkbox', value: false };
+    case 'files': return { type: 'files', files: [] };
+    case 'people': return { type: 'people', people: [] };
+    case 'relation': return { type: 'relation', ids: [] };
+    case 'formula': return { type: 'formula', display: '' };
+    case 'rollup': return { type: 'rollup', display: '' };
+    case 'created_time': return { type: 'created_time', value: '' };
+    case 'last_edited_time': return { type: 'last_edited_time', value: '' };
+    case 'created_by': return { type: 'created_by', user: null };
+    case 'last_edited_by': return { type: 'last_edited_by', user: null };
+    case 'unique_id': return { type: 'unique_id', prefix: null, number: null };
+    default: return { type: 'unsupported', raw: '' };
+  }
+}
+
+function emptyPage(schema: NotionDbSchema): Record<string, NotionPropValue> {
+  const out: Record<string, NotionPropValue> = {};
+  for (const p of schema.properties) out[p.name] = emptyValue(p.type);
+  return out;
+}
+
+// ── View tabs (decorative — only Table works) ────────────────────────────────
+const VIEW_TABS = [
+  { id: 'table',    label: 'Table',     icon: TableIcon },
+  { id: 'calendar', label: 'Calendar',  icon: Calendar },
+  { id: 'gallery',  label: 'Gallery',   icon: LayoutGrid },
+  { id: 'stats',    label: 'statistic', icon: BarChart3 },
 ];
 
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-function formatDate(dateStr: string): { day: string; month: string; num: string; year: string; dow: string } {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  return {
-    day: String(d).padStart(2, '0'),
-    month: MONTH_NAMES[m - 1],
-    num: String(d),
-    year: String(y),
-    dow: DAY_NAMES[date.getDay()],
-  };
-}
-
-function tradeResult(t: Trade): 'win' | 'loss' | 'be' | 'notrade' {
-  if (!t.tookTrade.includes('TOOK TRADE')) return 'notrade';
-  if (t.winLose.some((w) => w === 'win')) return 'win';
-  if (t.winLose.some((w) => w === 'lose')) return 'loss';
-  return 'be';
-}
-
-function resultColor(r: 'win' | 'loss' | 'be' | 'notrade'): string {
-  if (r === 'win') return 'var(--green)';
-  if (r === 'loss') return 'var(--red)';
-  if (r === 'be') return 'var(--yellow)';
-  return 'var(--blue)';
-}
-
-function resultLabel(r: 'win' | 'loss' | 'be' | 'notrade'): string {
-  if (r === 'win') return 'WIN';
-  if (r === 'loss') return 'LOSS';
-  if (r === 'be') return 'BE';
-  return 'NO TRADE';
-}
-
-function Badge({ label, color }: { label: string; color: string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        padding: '2px 8px',
-        borderRadius: 999,
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        background: `color-mix(in srgb, ${color} 14%, transparent)`,
-        color,
-        border: `1px solid color-mix(in srgb, ${color} 28%, transparent)`,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function EntryCard({
-  trade,
-  isSelected,
-  onClick,
-}: {
-  trade: Trade;
-  isSelected: boolean;
-  onClick: () => void;
-}) {
-  const result = tradeResult(trade);
-  const color = resultColor(result);
-  const isTrade = result !== 'notrade';
-  const fmt = trade.date ? formatDate(trade.date) : null;
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        borderRadius: '1.15rem',
-        padding: 4,
-        background: isSelected
-          ? `color-mix(in srgb, ${color} 6%, rgba(255,255,255,0.025))`
-          : 'rgba(255,255,255,0.018)',
-        border: `1px solid ${isSelected ? `color-mix(in srgb, ${color} 30%, var(--border-color))` : 'rgba(255,255,255,0.06)'}`,
-        boxShadow: isSelected ? `0 0 0 1px color-mix(in srgb, ${color} 18%, transparent)` : 'none',
-        cursor: 'pointer',
-        transition: 'all 160ms cubic-bezier(0.23, 1, 0.32, 1)',
-      }}
-      onMouseEnter={(e) => {
-        if (!isSelected) {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-          e.currentTarget.style.transform = 'translateY(-1px)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isSelected) {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.018)';
-          e.currentTarget.style.transform = 'translateY(0)';
-        }
-      }}
-    >
-      <div
-        style={{
-          borderRadius: 'calc(1.15rem - 4px)',
-          padding: '14px 16px',
-          background: 'var(--bg-card)',
-          borderLeft: `3px solid ${color}`,
-          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
-          display: 'flex',
-          gap: 14,
-          alignItems: 'flex-start',
-        }}
-      >
-        {/* Date column */}
-        <div
-          style={{
-            flexShrink: 0,
-            width: 44,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            paddingTop: 2,
-          }}
-        >
-          {fmt ? (
-            <>
-              <span
-                style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  color: 'var(--text-primary)',
-                  letterSpacing: '-0.04em',
-                }}
-              >
-                {fmt.num}
-              </span>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.04em', marginTop: 1 }}>
-                {fmt.month}
-              </span>
-              <span style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>{fmt.dow}</span>
-            </>
-          ) : (
-            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>—</span>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-color)', flexShrink: 0 }} />
-
-        {/* Content */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {/* Row 1: badges + PNL */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <Badge label={resultLabel(result)} color={color} />
-            {trade.rateTrade[0] && <Badge label={trade.rateTrade[0]} color="var(--purple)" />}
-            {trade.indices.map((idx) => (
-              <Badge key={idx} label={idx} color="var(--blue)" />
-            ))}
-            {trade.longShort.map((dir) => (
-              <Badge key={dir} label={dir.toUpperCase()} color={dir === 'long' ? 'var(--green)' : 'var(--red)'} />
-            ))}
-            {isTrade && trade.pnl !== null && (
-              <span
-                className="tabular"
-                style={{
-                  marginLeft: 'auto',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: result === 'win' ? 'var(--green)' : result === 'loss' ? 'var(--red)' : 'var(--yellow)',
-                  letterSpacing: '-0.03em',
-                  flexShrink: 0,
-                }}
-              >
-                {trade.pnl >= 0 ? '+' : ''}${trade.pnl}
-              </span>
-            )}
-          </div>
-
-          {/* Row 2: secondary info */}
-          {isTrade && (trade.poi.length > 0 || trade.biasForTheDay.length > 0 || trade.trend.length > 0) && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {trade.poi.slice(0, 2).map((v) => (
-                <span key={v} style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>
-                  POI: {v}
-                </span>
-              ))}
-              {trade.biasForTheDay.slice(0, 1).map((v) => (
-                <span key={v} style={{ fontSize: 10, color: 'var(--text-muted)' }}>· Bias: {v}</span>
-              ))}
-            </div>
-          )}
-
-          {/* Row 3: notes preview */}
-          {trade.notes?.trim() && (
-            <p
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                lineHeight: 1.6,
-                margin: 0,
-                overflow: 'hidden',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                letterSpacing: '0.01em',
-              }}
-            >
-              {trade.notes}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatsBar({ entries }: { entries: Trade[] }) {
-  const trades = entries.filter((t) => t.tookTrade.includes('TOOK TRADE'));
-  const wins = trades.filter((t) => t.winLose.includes('win')).length;
-  const losses = trades.filter((t) => t.winLose.includes('lose')).length;
-  const totalPnl = trades.reduce((s, t) => s + (t.pnl ?? 0), 0);
-  const wr = trades.length > 0 ? (wins / trades.length) * 100 : 0;
-
-  const items = [
-    { label: 'Entries', value: String(entries.length) },
-    { label: 'Trades', value: String(trades.length) },
-    { label: 'Win Rate', value: trades.length > 0 ? `${wr.toFixed(1)}%` : '—', color: wr >= 50 ? 'var(--green)' : 'var(--red)' },
-    { label: 'W / L', value: `${wins} / ${losses}` },
-    {
-      label: 'Net PNL',
-      value: trades.length > 0 ? `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(0)}` : '—',
-      color: totalPnl > 0 ? 'var(--green)' : totalPnl < 0 ? 'var(--red)' : undefined,
-    },
-  ];
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 0,
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border-color)',
-        borderRadius: 14,
-        overflow: 'hidden',
-      }}
-    >
-      {items.map((item, i) => (
-        <div
-          key={item.label}
-          style={{
-            flex: 1,
-            padding: '10px 16px',
-            borderRight: i < items.length - 1 ? '1px solid var(--border-color)' : 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}
-        >
-          <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)' }}>
-            {item.label}
-          </span>
-          <span
-            className="tabular"
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: '-0.02em',
-              color: item.color ?? 'var(--text-primary)',
-            }}
-          >
-            {item.value}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function JournalPage() {
-  const [allEntries, setAllEntries] = useState<Trade[]>([]);
+  const [pages, setPages] = useState<NotionPage[]>([]);
+  const [schema, setSchema] = useState<NotionDbSchema>({ title: '', realDbId: '', properties: [] });
+  const [realDbId, setRealDbId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [schema, setSchema] = useState<NotionSchema>({});
-  const [filter, setFilter] = useState<Filter>('all');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drawerMode, setDrawerMode] = useState<'create' | 'edit' | null>(null);
+  const [activeView, setActiveView] = useState<string>('table');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Record<string, NotionPropValue> | null>(null);
   const [saving, setSaving] = useState(false);
-  const [filePropNames, setFilePropNames] = useState<string[]>([]);
-  const [realDbId, setRealDbId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const headers = useMemo(() => notionHeaders(getNotionConfig()), []);
 
-  const fetchEntries = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    else setRefreshing(true);
+  // ── Fetch pages + schema ───────────────────────────────────────────────────
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true); else setRefreshing(true);
     try {
-      const res = await fetch('/api/trades', { headers });
+      const sh: Record<string, string> = { ...headers };
+      if (realDbId) sh['x-notion-realdb'] = realDbId;
+      const res = await fetch('/api/notion/pages', { headers: sh });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setAllEntries([...(data.trades as Trade[])].reverse());
+      setPages(data.pages as NotionPage[]);
+      setSchema(data.schema as NotionDbSchema);
       if (data.realDbId) {
         setRealDbId(data.realDbId);
-        // Persist so the next session starts with realDbId already known
         const cfg = getNotionConfig();
-        if (cfg && cfg.realDbId !== data.realDbId) {
-          saveNotionConfig({ ...cfg, realDbId: data.realDbId });
-        }
+        if (cfg && cfg.realDbId !== data.realDbId) saveNotionConfig({ ...cfg, realDbId: data.realDbId });
       }
       setError(null);
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Failed to load');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [headers]);
-
-  const fetchSchema = useCallback(async () => {
-    try {
-      const schemaHeaders: Record<string, string> = { ...headers };
-      if (realDbId) schemaHeaders['x-notion-realdb'] = realDbId;
-      const res = await fetch('/api/notion/schema', { headers: schemaHeaders });
-      const data = await res.json();
-      if (data.schema) setSchema(data.schema);
-    } catch {}
-  // realDbId intentionally included: re-fetch schema once realDbId is known
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    } finally { setLoading(false); setRefreshing(false); }
   }, [headers, realDbId]);
 
-  // Fetch entries on mount and poll every 30s
   useEffect(() => {
-    fetchEntries();
-    pollRef.current = setInterval(() => fetchEntries(true), 30_000);
+    fetchAll();
+    pollRef.current = setInterval(() => fetchAll(true), 15_000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchEntries]);
+  }, [fetchAll]);
 
-  // Fetch schema once realDbId is available (re-runs when realDbId is first discovered)
-  useEffect(() => {
-    fetchSchema();
-  }, [fetchSchema]);
-
-  const derivedSchema = useMemo((): NotionSchema => {
-    const fieldMap: Array<[keyof Trade, string]> = [
-      ['tookTrade', 'Took a trade today?'],
-      ['indices', 'indices'],
-      ['longShort', 'long/short'],
-      ['news', 'NEWS'],
-      ['reversalContinuation', 'reversal/continuation '],
-      ['drawInLiquidity', 'draw in liquidity'],
-      ['poi', 'POI'],
-      ['lowerTimeEntry', 'LOWER TIME ENTRY'],
-      ['rulesFeelings', 'RULES/feeling'],
-      ['trend', 'TREND'],
-      ['biasForTheDay', 'BIAS FOR THE DAY'],
-      ['rateTrade', 'RATE TRADE'],
-      ['winLose', 'win/lose'],
-      ['day', 'day'],
-    ];
-    const result: NotionSchema = {};
-    for (const [tradeKey, schemaKey] of fieldMap) {
-      const seen = new Set<string>();
-      for (const trade of allEntries) {
-        const val = trade[tradeKey as keyof Trade];
-        if (Array.isArray(val)) {
-          for (const v of val) if (v) seen.add(v as string);
-        }
-      }
-      if (seen.size > 0) result[schemaKey] = [...seen].map((name) => ({ name }));
-    }
-    return result;
-  }, [allEntries]);
-
-  const effectiveSchema = useMemo((): NotionSchema => {
-    if (Object.keys(schema).length > 0) {
-      // API schema loaded: it is authoritative (Notion-defined order + all options).
-      // Add any entry-derived values that aren't already present (edge cases).
-      const merged: NotionSchema = { ...schema };
-      for (const [key, derivedOpts] of Object.entries(derivedSchema)) {
-        if (!merged[key]) {
-          merged[key] = derivedOpts;
-        } else {
-          const existing = new Set(merged[key].map((o) => o.name));
-          const extras = derivedOpts.filter((o) => !existing.has(o.name));
-          if (extras.length > 0) merged[key] = [...merged[key], ...extras];
-        }
-      }
-      return merged;
-    }
-    // API schema unavailable: fall back to values actually seen in entries.
-    return derivedSchema;
-  }, [schema, derivedSchema]);
-
-  const filtered = useMemo(() => {
-    return allEntries.filter((t) => {
-      const r = tradeResult(t);
-      if (filter === 'all') return true;
-      if (filter === 'trade') return r !== 'notrade';
-      if (filter === 'notrade') return r === 'notrade';
-      return r === filter;
-    });
-  }, [allEntries, filter]);
-
-  const selectedTrade = allEntries.find((t) => t.id === selectedId) ?? null;
-
-  function openCreate() {
-    setSelectedId(null);
-    setDrawerMode('create');
-  }
-
-  function openEdit(id: string) {
-    setSelectedId(id);
-    setDrawerMode('edit');
-    setFilePropNames([]);
-    fetch(`/api/trades/${id}`, { headers })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.trade) {
-          setAllEntries((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, images: data.trade.images } : t)),
-          );
-        }
-        if (data.filePropNames) setFilePropNames(data.filePropNames);
-      })
-      .catch(() => {});
-  }
-
-  function closeDrawer() {
-    setDrawerMode(null);
-  }
-
-  function sortDesc(trades: Trade[]): Trade[] {
-    return [...trades].sort((a, b) => {
-      if (!a.date && !b.date) return 0;
-      if (!a.date) return 1;
-      if (!b.date) return -1;
-      return b.date.localeCompare(a.date);
-    });
-  }
-
-  async function handleSave(input: TradeInput) {
-    setSaving(true);
+  // ── Edit a cell ────────────────────────────────────────────────────────────
+  const commitEdit = useCallback(async (pageId: string, propName: string, next: NotionPropValue) => {
+    const prev = pages;
+    // Optimistic
+    setPages(curr => curr.map(p => p.id === pageId
+      ? { ...p, properties: { ...p.properties, [propName]: next } }
+      : p
+    ));
     try {
-      if (drawerMode === 'create') {
-        const res = await fetch('/api/trades/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...headers },
-          body: JSON.stringify(realDbId ? { ...input, realDbId } : input),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        // Insert and sort by date descending so position is correct
-        setAllEntries((prev) => sortDesc([data.trade, ...prev]));
-        // Switch directly to edit mode so images can be uploaded immediately
-        setSelectedId(data.trade.id);
-        setDrawerMode('edit');
-        setFilePropNames([]);
-        fetch(`/api/trades/${data.trade.id}`, { headers })
-          .then((r) => r.json())
-          .then((d) => { if (d.filePropNames) setFilePropNames(d.filePropNames); })
-          .catch(() => {});
-      } else if (drawerMode === 'edit' && selectedId) {
-        const res = await fetch(`/api/trades/${selectedId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', ...headers },
-          body: JSON.stringify(input),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        setAllEntries((prev) => prev.map((t) => (t.id === selectedId ? data.trade : t)));
-        closeDrawer();
-      }
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleImageUpload(tradeId: string, prop: string, file: File) {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('prop', prop);
-    const res = await fetch(`/api/trades/${tradeId}/image`, {
-      method: 'POST',
-      headers,
-      body: fd,
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    if (data.trade) {
-      setAllEntries((prev) =>
-        prev.map((t) => (t.id === tradeId ? { ...t, images: data.trade.images } : t)),
-      );
-    }
-    if (data.filePropNames) setFilePropNames(data.filePropNames);
-  }
-
-  async function handleDelete(id: string) {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/trades/${id}`, {
-        method: 'DELETE',
-        headers,
+      const res = await fetch(`/api/notion/pages/${pageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ patch: { [propName]: next } }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setAllEntries((prev) => prev.filter((t) => t.id !== id));
-      closeDrawer();
+      // Replace with server-truth (in case Notion normalized values).
+      setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
     } catch (e) {
+      console.error('[edit] failed', e);
+      setPages(prev); // rollback
+      alert(e instanceof Error ? e.message : 'Save failed');
+    }
+  }, [headers, pages]);
+
+  // ── Inline new row ─────────────────────────────────────────────────────────
+  const startInline = () => setDraft(emptyPage(schema));
+  const cancelInline = () => setDraft(null);
+
+  function setDraftProp(propName: string, value: NotionPropValue) {
+    setDraft(d => d ? { ...d, [propName]: value } : d);
+  }
+
+  async function commitInline() {
+    if (!draft) return;
+    setSaving(true);
+    try {
+      // Strip read-only / empty values where appropriate (server also strips, but be tidy)
+      const patch: Record<string, NotionPropValue> = {};
+      for (const [k, v] of Object.entries(draft)) {
+        // Skip totally-empty values to avoid clobbering Notion defaults.
+        if (v.type === 'title' && !v.text) continue;
+        if (v.type === 'rich_text' && !v.text) continue;
+        if (v.type === 'multi_select' && v.options.length === 0) continue;
+        if ((v.type === 'select' || v.type === 'status') && !v.option) continue;
+        if (v.type === 'date' && !v.start) continue;
+        if ((v.type === 'url' || v.type === 'email' || v.type === 'phone_number') && !v.value) continue;
+        if (v.type === 'number' && v.value === null) continue;
+        if (v.type === 'checkbox' && v.value === false) continue;
+        if (v.type === 'files') continue; // upload after create
+        patch[k] = v;
+      }
+      const res = await fetch('/api/notion/pages/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ patch, realDbId }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setPages(curr => [...curr, data.page as NotionPage]);
+      setDraft(null);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Create failed');
+    } finally { setSaving(false); }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  async function archiveRow(pageId: string) {
+    if (!confirm('Move this row to trash?')) return;
+    const prev = pages;
+    setPages(curr => curr.filter(p => p.id !== pageId));
+    try {
+      const res = await fetch(`/api/notion/pages/${pageId}`, { method: 'DELETE', headers });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+    } catch (e) {
+      setPages(prev);
       alert(e instanceof Error ? e.message : 'Delete failed');
-    } finally {
-      setSaving(false);
     }
   }
 
+  // ── File upload (for files-type cells) ─────────────────────────────────────
+  const uploadFile = useCallback(async (pageId: string, propName: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('prop', propName);
+    const res = await fetch(`/api/notion/pages/${pageId}/file`, { method: 'POST', headers, body: fd });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (data.page) setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
+  }, [headers]);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="p-6 space-y-4">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16, borderBottom: '1px solid var(--border-color)' }}>
-          <div className="skeleton" style={{ height: 26, width: 120, borderRadius: 8 }} />
-          <div className="skeleton" style={{ height: 36, width: 120, borderRadius: 10 }} />
-        </div>
-        <div className="skeleton" style={{ height: 56, borderRadius: 14 }} />
-        <div className="skeleton" style={{ height: 40, width: 380, borderRadius: 10 }} />
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="skeleton" style={{ height: 90, borderRadius: 18 }} />
+      <div style={{ padding: 32 }}>
+        <div className="skeleton" style={{ height: 36, width: 220, borderRadius: 6, marginBottom: 12 }} />
+        <div className="skeleton" style={{ height: 28, width: 140, borderRadius: 4, marginBottom: 24 }} />
+        {[0,1,2,3,4].map(i => (
+          <div key={i} className="skeleton" style={{ height: 38, marginBottom: 1, opacity: 1 - i * 0.13 }} />
         ))}
       </div>
     );
@@ -554,13 +204,10 @@ export default function JournalPage() {
   if (error) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>⚠</div>
-          <div style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>{error}</div>
-          <button
-            onClick={() => fetchEntries()}
-            style={{ padding: '8px 18px', borderRadius: 10, background: 'var(--blue)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
-          >
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.4 }}>⚠</div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>{error}</div>
+          <button onClick={() => fetchAll()} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--blue)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             Retry
           </button>
         </div>
@@ -568,188 +215,206 @@ export default function JournalPage() {
     );
   }
 
+  const titleText = schema.title || 'Journal';
+  const cols = schema.properties;
+  const tableMin = cols.reduce((s, c) => s + colWidth(c.type), 0) + 36; // +36 for action col
+
+  const CELL: React.CSSProperties = {
+    padding: '7px 10px',
+    borderBottom: '1px solid var(--border-color)',
+    borderRight: '1px solid var(--border-color)',
+    verticalAlign: 'middle',
+  };
+  const TH_BASE: React.CSSProperties = {
+    ...CELL,
+    position: 'sticky', top: 0, zIndex: 2,
+    background: 'var(--bg-card)',
+    fontSize: 11, fontWeight: 500,
+    color: 'var(--text-muted)',
+    whiteSpace: 'nowrap', cursor: 'default', userSelect: 'none',
+  };
+
   return (
-    <div style={{ position: 'relative', minHeight: '100%' }}>
-      {/* Overlay when drawer is open */}
-      {drawerMode && (
-        <div
-          onClick={closeDrawer}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 40,
-            background: 'rgba(0,0,0,0.45)',
-            backdropFilter: 'blur(2px)',
-            transition: 'opacity 200ms',
-          }}
-        />
-      )}
-
-      {/* Drawer */}
-      <EntryDrawer
-        mode={drawerMode}
-        trade={drawerMode === 'edit' ? selectedTrade : null}
-        schema={effectiveSchema}
-        saving={saving}
-        filePropNames={filePropNames}
-        onSave={handleSave}
-        onDelete={handleDelete}
-        onImageUpload={handleImageUpload}
-        onClose={closeDrawer}
-      />
-
-      {/* Main content */}
-      <div className="p-6 space-y-5">
-        {/* Header */}
-        <div
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottom: '1px solid var(--border-color)' }}
-        >
-          <div>
-            <h1
-              style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.2 }}
-            >
-              Journal
-            </h1>
-            <p style={{ fontSize: 12, marginTop: 3, color: 'var(--text-secondary)' }}>
-              {allEntries.length} entries · synced with Notion
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={() => fetchEntries(true)}
-              disabled={refreshing}
-              title="Sync from Notion"
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'var(--bg-surface)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-secondary)',
-                cursor: refreshing ? 'wait' : 'pointer',
-                transition: 'all 150ms',
-              }}
-            >
-              <RefreshCw size={14} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
-            </button>
-            <button
-              onClick={openCreate}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 16px',
-                borderRadius: 10,
-                fontSize: 13,
-                fontWeight: 600,
-                letterSpacing: '-0.01em',
-                background: 'var(--blue)',
-                color: 'white',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 1px 0 rgba(255,255,255,0.08) inset, 0 4px 14px rgba(59,130,246,0.25)',
-                transition: 'all 160ms cubic-bezier(0.23, 1, 0.32, 1)',
-              }}
-              onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.97) translateY(1px)'; }}
-              onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; }}
-            >
-              <Plus size={14} strokeWidth={2.5} />
-              New Entry
-            </button>
-          </div>
-        </div>
-
-        {/* Stats bar */}
-        <StatsBar entries={filtered} />
-
-        {/* Filter tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 4,
-            padding: 4,
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 12,
-            width: 'fit-content',
-          }}
-        >
-          {FILTER_OPTIONS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setFilter(key)}
-              style={{
-                padding: '5px 13px',
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: filter === key ? 600 : 400,
-                letterSpacing: filter === key ? '-0.01em' : '0',
-                background: filter === key ? 'var(--blue)' : 'transparent',
-                color: filter === key ? 'white' : 'var(--text-secondary)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 150ms cubic-bezier(0.23, 1, 0.32, 1)',
-                boxShadow: filter === key ? '0 1px 4px rgba(59,130,246,0.3)' : 'none',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Entry list */}
-        {filtered.length === 0 ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '64px 24px',
-              color: 'var(--text-muted)',
-              gap: 10,
-            }}
-          >
-            <div style={{ fontSize: 32, opacity: 0.4 }}>◯</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>
-              {filter === 'all' ? 'No journal entries yet' : `No ${filter} entries`}
-            </div>
-            {filter === 'all' && (
-              <button
-                onClick={openCreate}
-                style={{
-                  marginTop: 8,
-                  padding: '8px 20px',
-                  borderRadius: 10,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  background: 'var(--blue)',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                Add first entry
-              </button>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filtered.map((trade) => (
-              <EntryCard
-                key={trade.id}
-                trade={trade}
-                isSelected={selectedId === trade.id && drawerMode === 'edit'}
-                onClick={() => openEdit(trade.id)}
-              />
-            ))}
-          </div>
-        )}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* Page header */}
+      <div style={{ padding: '24px 32px 0 32px', flexShrink: 0 }}>
+        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.1 }}>
+          {titleText}
+        </h1>
       </div>
+
+      {/* DB heading + view tabs */}
+      <div style={{ padding: '18px 32px 0 32px', flexShrink: 0 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em', margin: 0, marginBottom: 8 }}>
+          {titleText}
+        </h2>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {VIEW_TABS.map(tab => {
+              const Icon = tab.icon;
+              const active = activeView === tab.id;
+              return (
+                <button key={tab.id} onClick={() => setActiveView(tab.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '7px 10px', background: 'transparent', border: 'none',
+                    cursor: 'pointer', fontSize: 13,
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: active ? 600 : 400,
+                    borderBottom: active ? '2px solid var(--text-primary)' : '2px solid transparent',
+                    marginBottom: -1,
+                  }}>
+                  <Icon size={14} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 4 }}>
+            <button onClick={() => fetchAll(true)} disabled={refreshing} title="Sync from Notion"
+              style={{ width: 28, height: 28, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: refreshing ? 'wait' : 'pointer' }}>
+              <RefreshCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+            </button>
+            <button onClick={startInline}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 4, fontSize: 13, fontWeight: 500, background: 'var(--blue)', color: 'white', border: 'none', cursor: 'pointer' }}>
+              New
+              <ChevronDown size={12} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {activeView !== 'table' ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          {VIEW_TABS.find(v => v.id === activeView)?.label} view — coming soon
+        </div>
+      ) : (
+        <>
+          {/* Filter / count row */}
+          <div style={{ padding: '8px 32px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{pages.length} rows</span>
+          </div>
+
+          {/* Table */}
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: tableMin }}>
+              <thead>
+                <tr>
+                  {cols.map(col => (
+                    <th key={col.id} style={{
+                      ...TH_BASE,
+                      width: colWidth(col.type), minWidth: colWidth(col.type),
+                      textAlign: col.type === 'number' ? 'right' : 'left',
+                    }}>
+                      {col.name}
+                    </th>
+                  ))}
+                  <th style={{ ...TH_BASE, width: 36, minWidth: 36 }} />
+                </tr>
+              </thead>
+
+              <tbody>
+                {pages.map(page => (
+                  <tr key={page.id}
+                    onMouseEnter={() => setHoveredId(page.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    style={{ background: hoveredId === page.id ? 'rgba(255,255,255,0.025)' : 'transparent' }}
+                  >
+                    {cols.map(col => {
+                      const value = page.properties[col.name] ?? emptyValue(col.type);
+                      const w = colWidth(col.type);
+                      return (
+                        <td key={col.id} style={{
+                          ...CELL, width: w, minWidth: w,
+                          textAlign: col.type === 'number' ? 'right' : 'left',
+                        }}>
+                          <EditableCell
+                            prop={col}
+                            value={value}
+                            onCommit={(next) => commitEdit(page.id, col.name, next)}
+                            onUploadFile={col.type === 'files' ? (f) => uploadFile(page.id, col.name, f) : undefined}
+                          />
+                        </td>
+                      );
+                    })}
+                    <td style={{ ...CELL, width: 36, minWidth: 36, textAlign: 'center' }}>
+                      <button onClick={() => archiveRow(page.id)}
+                        title="Move to trash"
+                        style={{
+                          width: 22, height: 22, padding: 0, border: 'none', background: 'transparent',
+                          color: 'var(--text-muted)', cursor: 'pointer', borderRadius: 3,
+                          opacity: hoveredId === page.id ? 1 : 0,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {/* Inline new-row */}
+                {draft && (
+                  <tr style={{ background: 'rgba(59,130,246,0.05)' }}>
+                    {cols.map((col, idx) => {
+                      const w = colWidth(col.type);
+                      const value = draft[col.name] ?? emptyValue(col.type);
+                      return (
+                        <td key={col.id} style={{
+                          ...CELL, width: w, minWidth: w,
+                          textAlign: col.type === 'number' ? 'right' : 'left',
+                        }}>
+                          <EditableCell
+                            prop={col}
+                            value={value}
+                            onCommit={(next) => setDraftProp(col.name, next)}
+                            initialEdit={col.type === 'title'}
+                            autoFocus={idx === 0}
+                          />
+                        </td>
+                      );
+                    })}
+                    <td style={{ ...CELL, width: 36, minWidth: 36 }} />
+                  </tr>
+                )}
+
+                {/* Footer "+ New page" / draft action bar */}
+                {!draft ? (
+                  <tr>
+                    <td onClick={startInline} colSpan={cols.length + 1}
+                      style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13 }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                    >
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Plus size={13} strokeWidth={2} />
+                        New page
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr>
+                    <td colSpan={cols.length + 1} style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                        <span>Fill row, then Save · Escape to cancel</span>
+                        <button onClick={commitInline} disabled={saving}
+                          style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'var(--blue)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                          {saving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={cancelInline}
+                          style={{ padding: '4px 8px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: 4, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <X size={11} /> Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

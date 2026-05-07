@@ -122,3 +122,8 @@ body {
   background-size: 1200px 100%;
   animation: skeleton-shimmer 2s ease-in-out infinite;
 }
+
+/* Notion-style open button — visible only on row hover */
+tr:hover .open-btn {
+  opacity: 1 !important;
+}

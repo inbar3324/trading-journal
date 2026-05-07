@@ -47,6 +47,7 @@ export function parseTrade(page: Record<string, unknown>): Trade {
   const pnlField = p['PNL'] as Record<string, unknown> | undefined;
   const tradeIdeaLink = p['TRADE  IDEA LINK'] as Record<string, unknown> | undefined;
   const oneMLink = p['1M trade link'] as Record<string, unknown> | undefined;
+  const linkAfter = p['link to what happend after'] as Record<string, unknown> | undefined;
 
   const cover = page.cover as Record<string, unknown> | undefined;
   const coverUrl = ((cover?.external as Record<string, unknown>)?.url as string)
@@ -83,6 +84,7 @@ export function parseTrade(page: Record<string, unknown>): Trade {
     notes: richTextContent(p['NOTES!']),
     tradeIdeaLink: (tradeIdeaLink?.url as string) ?? null,
     oneMTradeLink: (oneMLink?.url as string) ?? null,
+    linkToWhatHappenedAfter: (linkAfter?.url as string) ?? null,
     images,
   };
 }
@@ -138,6 +140,7 @@ function buildProperties(input: TradeInput): Record<string, unknown> {
   }
   if (input.tradeIdeaLink !== undefined) p['TRADE  IDEA LINK'] = { url: input.tradeIdeaLink || null };
   if (input.oneMTradeLink !== undefined) p['1M trade link'] = { url: input.oneMTradeLink || null };
+  if (input.linkToWhatHappenedAfter !== undefined) p['link to what happend after'] = { url: input.linkToWhatHappenedAfter || null };
   return p;
 }
 
@@ -348,7 +351,7 @@ export async function archiveTrade(pageId: string, creds?: { key?: string; dbId?
   await (notion.pages as any).update({ page_id: pageId, archived: true });
 }
 
-export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<{ trades: Trade[]; realDbId: string }> {
+export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<{ trades: Trade[]; realDbId: string; dbTitle: string }> {
   const notion = makeClient(creds);
   const dataSourceId = resolveDbId(creds);
   const key = creds?.key ?? process.env.NOTION_API_KEY ?? '';
@@ -439,5 +442,18 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
     if (discovered) realDbId = discovered;
   }
 
-  return { trades, realDbId };
+  // Fetch DB title (best-effort)
+  let dbTitle = '';
+  try {
+    const titleRes = await fetch(`https://api.notion.com/v1/databases/${realDbId}`, { headers });
+    if (titleRes.ok) {
+      const tdata = await titleRes.json() as Record<string, unknown>;
+      const titleArr = tdata.title as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(titleArr) && titleArr.length > 0) {
+        dbTitle = titleArr.map(t => (t.plain_text as string) ?? '').join('');
+      }
+    }
+  } catch { /* ignore */ }
+
+  return { trades, realDbId, dbTitle };
 }

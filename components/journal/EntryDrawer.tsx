@@ -35,6 +35,7 @@ const EMPTY_FORM: TradeInput = {
   notes: '',
   tradeIdeaLink: null,
   oneMTradeLink: null,
+  linkToWhatHappenedAfter: null,
 };
 
 function tradeToInput(t: Trade): TradeInput {
@@ -59,6 +60,7 @@ function tradeToInput(t: Trade): TradeInput {
     notes: t.notes,
     tradeIdeaLink: t.tradeIdeaLink,
     oneMTradeLink: t.oneMTradeLink,
+    linkToWhatHappenedAfter: t.linkToWhatHappenedAfter,
   };
 }
 
@@ -487,14 +489,14 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
 
         {/* ── Trade Decision ── */}
         <div>
-          <SectionTitle>Did you trade?</SectionTitle>
-          <BigToggle
-            options={[
-              { value: 'TOOK TRADE', label: 'Took Trade', color: 'var(--green)' },
-              { value: 'NO TRADE', label: 'No Trade', color: 'var(--blue)' },
-            ]}
+          <SectionTitle>Took a trade today?</SectionTitle>
+          <ChipGroup
+            options={getOpts(schema, 'Took a trade today?').length > 0
+              ? getOpts(schema, 'Took a trade today?')
+              : ['TOOK TRADE', 'NO TRADE']}
             selected={arr(form.tookTrade)}
             onChange={(v) => setField('tookTrade', v)}
+            color="var(--blue)"
           />
         </div>
 
@@ -768,6 +770,14 @@ export default function EntryDrawer({ mode, trade, schema, saving, filePropNames
                 <TextInput
                   value={form.oneMTradeLink ?? ''}
                   onChange={(v) => setField('oneMTradeLink', v || null)}
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <FieldLabel>Link to what happened after</FieldLabel>
+                <TextInput
+                  value={form.linkToWhatHappenedAfter ?? ''}
+                  onChange={(v) => setField('linkToWhatHappenedAfter', v || null)}
                   placeholder="https://..."
                 />
               </div>

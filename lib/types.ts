@@ -21,6 +21,7 @@ export interface Trade {
   notes: string;
   tradeIdeaLink: string | null;
   oneMTradeLink: string | null;
+  linkToWhatHappenedAfter: string | null;
   images: { url: string; label: string }[];
 }
 
@@ -74,6 +75,7 @@ export interface TradeInput {
   notes?: string;
   tradeIdeaLink?: string | null;
   oneMTradeLink?: string | null;
+  linkToWhatHappenedAfter?: string | null;
 }
 
 export interface FieldOption {

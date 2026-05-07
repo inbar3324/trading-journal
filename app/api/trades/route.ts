@@ -5,8 +5,8 @@ export async function GET(request: Request) {
   const key  = request.headers.get('x-notion-key')  ?? undefined;
   const dbId = request.headers.get('x-notion-db')   ?? undefined;
   try {
-    const { trades, realDbId } = await getAllTrades({ key, dbId });
-    return NextResponse.json({ trades, realDbId }, {
+    const { trades, realDbId, dbTitle } = await getAllTrades({ key, dbId });
+    return NextResponse.json({ trades, realDbId, dbTitle }, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err) {
