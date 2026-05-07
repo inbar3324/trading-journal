@@ -44,7 +44,7 @@ export function OptionPopover({ anchorRect, options, selected, multi, allowCreat
   const exactExists = options.some(o => o.name.toLowerCase() === search.toLowerCase());
 
   return (
-    <div ref={ref} onClick={e => e.stopPropagation()} style={{
+    <div ref={ref} data-popover onClick={e => e.stopPropagation()} style={{
       position: 'fixed', top, left, minWidth, maxHeight, zIndex: 1000,
       background: 'var(--bg-elevated)', border: '1px solid var(--border-color)',
       borderRadius: 6, boxShadow: '0 12px 32px rgba(0,0,0,0.6)',

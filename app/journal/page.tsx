@@ -64,6 +64,7 @@ export default function JournalPage() {
   const [draft, setDraft] = useState<Record<string, NotionPropValue> | null>(null);
   const [saving, setSaving] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const draftRowRef = useRef<HTMLTableRowElement>(null);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const headers = useMemo(() => notionHeaders(getNotionConfig()), []);
@@ -129,14 +130,12 @@ export default function JournalPage() {
     setDraft(d => d ? { ...d, [propName]: value } : d);
   }
 
-  async function commitInline() {
+  const commitInline = useCallback(async () => {
     if (!draft) return;
     setSaving(true);
     try {
-      // Strip read-only / empty values where appropriate (server also strips, but be tidy)
       const patch: Record<string, NotionPropValue> = {};
       for (const [k, v] of Object.entries(draft)) {
-        // Skip totally-empty values to avoid clobbering Notion defaults.
         if (v.type === 'title' && !v.text) continue;
         if (v.type === 'rich_text' && !v.text) continue;
         if (v.type === 'multi_select' && v.options.length === 0) continue;
@@ -145,9 +144,10 @@ export default function JournalPage() {
         if ((v.type === 'url' || v.type === 'email' || v.type === 'phone_number') && !v.value) continue;
         if (v.type === 'number' && v.value === null) continue;
         if (v.type === 'checkbox' && v.value === false) continue;
-        if (v.type === 'files') continue; // upload after create
+        if (v.type === 'files') continue;
         patch[k] = v;
       }
+      if (Object.keys(patch).length === 0) { setDraft(null); return; }
       const res = await fetch('/api/notion/pages/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
@@ -160,7 +160,19 @@ export default function JournalPage() {
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Create failed');
     } finally { setSaving(false); }
-  }
+  }, [draft, headers, realDbId]);
+
+  // Auto-save draft on click outside the draft row
+  useEffect(() => {
+    if (!draft) return;
+    function onMouseDown(e: MouseEvent) {
+      const el = e.target as HTMLElement;
+      if (el.closest('[data-cancel]') || el.closest('[data-popover]')) return;
+      if (draftRowRef.current && !draftRowRef.current.contains(el)) commitInline();
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onMouseDown), 0);
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', onMouseDown); };
+  }, [draft, commitInline]);
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   async function archiveRow(pageId: string) {
@@ -296,7 +308,7 @@ export default function JournalPage() {
             <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{pages.length} rows</span>
           </div>
 
-          {/* Table */}
+          {/* Table — scrollable */}
           <div style={{ flex: 1, overflow: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: tableMin }}>
               <thead>
@@ -356,7 +368,7 @@ export default function JournalPage() {
 
                 {/* Inline new-row */}
                 {draft && (
-                  <tr style={{ background: 'rgba(59,130,246,0.05)' }}>
+                  <tr ref={draftRowRef} style={{ background: 'rgba(59,130,246,0.05)' }}>
                     {cols.map((col, idx) => {
                       const w = colWidth(col.type);
                       const value = draft[col.name] ?? emptyValue(col.type);
@@ -379,31 +391,13 @@ export default function JournalPage() {
                   </tr>
                 )}
 
-                {/* Footer "+ New page" / draft action bar */}
-                {!draft ? (
-                  <tr>
-                    <td onClick={startInline} colSpan={cols.length + 1}
-                      style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13 }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                    >
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <Plus size={13} strokeWidth={2} />
-                        New page
-                      </span>
-                    </td>
-                  </tr>
-                ) : (
+                {draft && (
                   <tr>
                     <td colSpan={cols.length + 1} style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                        <span>Fill row, then Save · Escape to cancel</span>
-                        <button onClick={commitInline} disabled={saving}
-                          style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'var(--blue)', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                          {saving ? 'Saving…' : 'Save'}
-                        </button>
-                        <button onClick={cancelInline}
-                          style={{ padding: '4px 8px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: 4, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span>{saving ? 'Saving…' : 'Click outside to save'}</span>
+                        <button data-cancel="true" onClick={cancelInline}
+                          style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: 4, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <X size={11} /> Cancel
                         </button>
                       </div>
@@ -413,6 +407,18 @@ export default function JournalPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Always-visible New page button below the table */}
+          {!draft && (
+            <div onClick={startInline}
+              style={{ padding: '8px 32px', flexShrink: 0, borderTop: '1px solid var(--border-color)', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = ''; }}
+            >
+              <Plus size={13} strokeWidth={2} />
+              New page
+            </div>
+          )}
         </>
       )}
     </div>
