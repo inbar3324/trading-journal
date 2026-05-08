@@ -97,6 +97,16 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
   const [selB, setSelB] = useState<string[]>([]);
   const [view, setView] = useState<'matrix' | 'chart'>('matrix');
 
+  useEffect(() => {
+    if (fields.length > 0 && !fields.find(f => f.key === fieldA))
+      setFieldA(fields[0].key as TradeArrayField);
+  }, [fields, fieldA]);
+
+  useEffect(() => {
+    if (fieldB !== 'none' && !fields.find(f => f.key === fieldB))
+      setFieldB(fields.length > 1 ? fields[1].key as TradeArrayField : 'none');
+  }, [fields, fieldB]);
+
   const isNoneB = fieldB === 'none';
 
   const valuesA = useMemo(() => uniqueValues(trades, fieldA), [trades, fieldA]);
@@ -574,11 +584,13 @@ export default function AnalyticsPage() {
   }, []);
 
   const fields = useMemo(() =>
-    BASE_fields.map(f => ({
-      key: f.key,
-      label: fieldMap ? (fieldMap[f.mapKey] as string) : f.label,
-    })),
-  [fieldMap]);
+    BASE_fields
+      .map(f => ({
+        key: f.key,
+        label: fieldMap ? ((fieldMap[f.mapKey] as string) || f.label) : f.label,
+      }))
+      .filter(f => uniqueValues(actual, f.key as TradeArrayField).length > 0),
+  [fieldMap, actual]);
 
   const actual = useMemo(() => getActualTrades(allTrades), [allTrades]);
 
