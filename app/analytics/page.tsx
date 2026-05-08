@@ -558,6 +558,7 @@ export default function AnalyticsPage() {
 
   const [newsOpen, setNewsOpen]             = useState(false);
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+  const [timeTradesOpen, setTimeTradesOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/trades', { headers: notionHeaders(getNotionConfig()) })
@@ -865,35 +866,47 @@ export default function AnalyticsPage() {
             </div>
 
             <div>
-              <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
-                All trades by entry time
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
-                      {['שעה', 'תאריך', 'תוצאה', 'PNL'].map((h) => (
-                        <th key={h} className="text-left pb-2 pr-4 font-medium uppercase tracking-wider">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {timeAnalysis.timedTrades.map((tt, i) => {
-                      const color = tt.isWin ? 'var(--green)' : tt.isLoss ? 'var(--red)' : 'var(--text-secondary)';
-                      return (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                          <td className="py-2 pr-4 font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>{tt.timeStr}</td>
-                          <td className="py-2 pr-4" style={{ color: 'var(--text-secondary)' }}>{tt.trade.date ?? '—'}</td>
-                          <td className="py-2 pr-4 font-semibold" style={{ color }}>{tt.isWin ? 'Win' : tt.isLoss ? 'Loss' : 'BE'}</td>
-                          <td className="py-2 font-semibold tabular" style={{ color }}>
-                            {tt.trade.pnl !== null ? `${tt.trade.pnl >= 0 ? '+' : ''}$${tt.trade.pnl.toFixed(2)}` : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <button
+                onClick={() => setTimeTradesOpen(v => !v)}
+                className="flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                style={{
+                  color: 'var(--text-secondary)',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <span>{timeTradesOpen ? '▾' : '▸'}</span>
+                <span>All trades by entry time</span>
+                <span style={{ color: 'var(--text-muted)' }}>({timeAnalysis.timedTrades.length})</span>
+              </button>
+              {timeTradesOpen && (
+                <div className="overflow-x-auto mt-3">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                        {['שעה', 'תאריך', 'תוצאה', 'PNL'].map((h) => (
+                          <th key={h} className="text-left pb-2 pr-4 font-medium uppercase tracking-wider">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timeAnalysis.timedTrades.map((tt, i) => {
+                        const color = tt.isWin ? 'var(--green)' : tt.isLoss ? 'var(--red)' : 'var(--text-secondary)';
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 pr-4 font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>{tt.timeStr}</td>
+                            <td className="py-2 pr-4" style={{ color: 'var(--text-secondary)' }}>{tt.trade.date ?? '—'}</td>
+                            <td className="py-2 pr-4 font-semibold" style={{ color }}>{tt.isWin ? 'Win' : tt.isLoss ? 'Loss' : 'BE'}</td>
+                            <td className="py-2 font-semibold tabular" style={{ color }}>
+                              {tt.trade.pnl !== null ? `${tt.trade.pnl >= 0 ? '+' : ''}$${tt.trade.pnl.toFixed(2)}` : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </>
         )}

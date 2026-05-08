@@ -36,8 +36,13 @@ export async function POST(request: Request) {
     return Response.json({ error: 'שגיאה בקריאת הנתונים' }, { status: 400 });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey?.startsWith('AIza')) {
+  const apiKeys = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+  ].filter((k): k is string => !!k?.startsWith('AIza'));
+
+  if (apiKeys.length === 0) {
     const summary = generateStatsSummary(trades, weekStart, weekEnd);
     return Response.json({ summary, source: 'stats' });
   }
@@ -110,14 +115,32 @@ If a note is ambiguous — default to NOT treating it as a problem.
 
 ━━ PROFESSIONAL TRADING MENTOR KNOWLEDGE ━━
 
-You understand trading deeply. When you identify a problem, derive the solution using real trading logic:
+You understand trading deeply. When you identify a problem, derive the solution using real trading logic.
+This is a reference library — only apply a pattern if multiple journal entries actually support it. Never project a pattern that isn't there.
 
-- Stopped out then trade goes to target → Stop is placed too tight. Solution: widen to the next logical level (swing, FVG, OB), reduce position size to keep the same dollar risk.
-- Missed trades because limit didn't fill → Over-relying on precise entry. Solution: use a small zone instead of a single price, or switch to market/stop-limit entry at confirmation.
-- Exiting early before target → Fear overrides the plan. Solution: define TP before entry and make it non-negotiable.
-- Overtrading → No filter. Solution: pick one setup per session. Everything else is observation only.
-- Revenge trades → Emotional reaction. Solution: mandatory 30-minute break after any loss.
-- Entering without a clear plan → Impulsive execution. Solution: write the trade thesis before touching the order.
+- Stop too tight relative to market volatility → Trader is stopped out on normal noise, then watches the move continue. Solution: set stop at the next structural level (swing, FVG, OB), not a fixed dollar amount.
+- FOMO entry after the ideal entry zone already passed → Entering with a bad R:R chasing a move. Solution: if price moved beyond the entry range, the trade is cancelled — not modified.
+- Moving stop further away to "give the trade room" → A small loss becomes a large one. Solution: stop is defined before entry and never moved wider.
+- Exiting a good trade early out of fear of giving back profit → Destroys long-term expectancy. Solution: define target before entry and make it non-negotiable.
+- Taking too many trades in one session → Quality drops as edge dilutes. Solution: set a hard daily max trade count.
+- Doubling position size after a loss → Emotional decision that amplifies drawdown. Solution: fixed position size for the entire day, decided before the session.
+- Not taking an excellent setup due to fear of another loss → Fear causes the trader to miss their best edge. Solution: the first A+ setup of the day is mandatory.
+- Continued trading after hitting daily profit target → Greed returns profits to the market. Solution: once daily target is hit, session ends.
+- Continued trading after daily loss limit → A bad day becomes a disaster. Solution: automatic stop after maximum daily loss, no exceptions.
+- Entering before clear confirmation → More fakeouts, weaker entries. Solution: entry only after candle close or confirmed signal.
+- Trading during major news events → Unpredictable volatility destroys setups. Solution: no trading X minutes before and after scheduled news.
+- Switching strategies every few days → Not enough data to know what actually works. Solution: commit to one setup for a defined period.
+- Trading out of boredom when there's no clear setup → Forcing trades with no edge. Solution: if no valid setup appears in a defined time window, close the platform.
+- Moving target further out of greed mid-trade → Good trades reverse before hitting the new target. Solution: target is set before entry and never changed.
+- Taking a trade against the primary trend → Fighting the dominant market flow. Solution: entries only in the direction of the main trend.
+- Entering too early at market open before price stabilizes → High noise, low directional conviction. Solution: wait a defined number of minutes after open before trading.
+- Not stopping after a streak of consecutive losses → Deteriorating mindset leads to worse decisions. Solution: after X consecutive losses, mandatory break — session over.
+- Closing partial position too early → Reduces the potential of winning trades. Solution: partial exits only according to a pre-defined rule, never improvised.
+- Checking PNL frequently during the session → Decisions become money-based instead of setup-based. Solution: hide PNL during trading hours.
+- Entering without a defined stop and target → Improvising under pressure leads to poor exits. Solution: stop and target must be defined before touching the order.
+- Not doing a weekly review → The same mistakes repeat indefinitely. Solution: end-of-week review is mandatory, not optional.
+
+IMPORTANT: The list above is a reference library, not a checklist. Only surface a pattern if the journal notes independently point to it. If the notes don't support a pattern — ignore it. The primary source is always what the trader actually wrote.
 
 ━━ rulesFeelings FIELD ━━
 
@@ -158,29 +181,31 @@ ${analyticsBlock}
 ## פתרון
 פעולה אחת ספציפית שנגזרת ישירות מהבעיה. אפשר לבצע כבר בסשן הבא.`;
 
-  try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            maxOutputTokens: 1000,
-            temperature: 0.7,
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
-      }
-    );
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      maxOutputTokens: 1000,
+      temperature: 0.7,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
 
-    if (!geminiRes.ok || !geminiRes.body) {
-      throw new Error(`Gemini ${geminiRes.status}`);
+  try {
+    let geminiRes: Response | null = null;
+    for (const apiKey of apiKeys) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }
+      );
+      if (res.ok && res.body) { geminiRes = res; break; }
     }
 
-    const reader  = geminiRes.body.getReader();
+    if (!geminiRes) {
+      throw new Error('All keys failed');
+    }
+
+    const reader  = geminiRes!.body!.getReader();
     const decoder = new TextDecoder();
 
     const stream = new ReadableStream({
