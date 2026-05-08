@@ -586,12 +586,21 @@ export default function AnalyticsPage() {
   const actual = useMemo(() => getActualTrades(allTrades), [allTrades]);
 
   const fields = useMemo(() => {
+    const usedNotionNames = new Set<string>();
     const standard = BASE_fields
       .map(f => ({
         key: f.key,
         label: fieldMap ? ((fieldMap[f.mapKey] as string) || f.label) : f.label,
+        notionName: fieldMap ? (fieldMap[f.mapKey] as string) : null,
       }))
-      .filter(f => uniqueValues(actual, f.key).length > 0);
+      .filter(f => {
+        if (!f.notionName) return true;
+        if (usedNotionNames.has(f.notionName)) return false;
+        usedNotionNames.add(f.notionName);
+        return true;
+      })
+      .filter(f => uniqueValues(actual, f.key).length > 0)
+      .map(({ key, label }) => ({ key, label }));
 
     const mappedNames = new Set(fieldMap ? Object.values(fieldMap) : []);
     const extraKeys = new Set<string>();
