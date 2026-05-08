@@ -309,7 +309,7 @@ export default function JournalPage() {
           </div>
 
           {/* Table — scrollable */}
-          <div style={{ flex: 1, overflow: 'auto' }}>
+          <div className="journal-scroll" style={{ flex: 1, overflow: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: tableMin }}>
               <thead>
                 <tr>
