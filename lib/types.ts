@@ -23,6 +23,7 @@ export interface Trade {
   oneMTradeLink: string | null;
   linkToWhatHappenedAfter: string | null;
   images: { url: string; label: string }[];
+  extraFields: Record<string, string[]>;
 }
 
 export interface GroupStat {

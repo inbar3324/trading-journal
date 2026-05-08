@@ -74,9 +74,14 @@ function barColor(wr: number) {
   return wr >= 60 ? '#10B981' : wr >= 40 ? '#F59E0B' : '#F43F5E';
 }
 
-function uniqueValues(trades: Trade[], field: TradeArrayField): string[] {
+function getFieldValues(t: Trade, id: string): string[] {
+  if (id.startsWith('extra:')) return t.extraFields?.[id.slice(6)] ?? [];
+  return (t[id as TradeArrayField] as string[]) ?? [];
+}
+
+function uniqueValues(trades: Trade[], id: string): string[] {
   const s = new Set<string>();
-  for (const t of trades) for (const v of t[field] as string[]) if (v) s.add(v);
+  for (const t of trades) for (const v of getFieldValues(t, id)) if (v) s.add(v);
   return Array.from(s).sort();
 }
 
@@ -90,23 +95,22 @@ function parseTime(raw: string): { hour: number; min: number; totalMin: number }
 
 // ── Data Explorer (cross-reference) ──────────────────────────────────────────
 
-function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: TradeArrayField; label: string }[] }) {
-  const [fieldA, setFieldA] = useState<TradeArrayField>('biasForTheDay');
-  const [fieldB, setFieldB] = useState<TradeArrayField | 'none'>('news');
+function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: string; label: string }[] }) {
+  const [fieldA, setFieldA] = useState<string>('biasForTheDay');
+  const [fieldB, setFieldB] = useState<string>('news');
   const [selA, setSelA] = useState<string[]>([]);
   const [selB, setSelB] = useState<string[]>([]);
   const [view, setView] = useState<'matrix' | 'chart'>('matrix');
 
   // Derive safe field values — fall back to first available if current selection has no data
-  const safeA: TradeArrayField = fields.find(f => f.key === fieldA)
-    ? fieldA : (fields[0]?.key as TradeArrayField ?? fieldA);
-  const safeB: TradeArrayField | 'none' = fieldB === 'none' || fields.find(f => f.key === fieldB)
-    ? fieldB : (fields.length > 1 ? fields[1].key as TradeArrayField : 'none');
+  const safeA = fields.find(f => f.key === fieldA) ? fieldA : (fields[0]?.key ?? fieldA);
+  const safeB = fieldB === 'none' || fields.find(f => f.key === fieldB)
+    ? fieldB : (fields.length > 1 ? fields[1].key : 'none');
 
   const isNoneB = safeB === 'none';
 
   const valuesA = useMemo(() => uniqueValues(trades, safeA), [trades, safeA]);
-  const valuesB = useMemo(() => isNoneB ? [] : uniqueValues(trades, safeB as TradeArrayField), [trades, safeB, isNoneB]);
+  const valuesB = useMemo(() => isNoneB ? [] : uniqueValues(trades, safeB), [trades, safeB, isNoneB]);
 
   // Reset selections when field changes
   useMemo(() => { setSelA([]); }, [safeA]); // eslint-disable-line
@@ -119,7 +123,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
   const singleStats = useMemo(() => {
     if (!isNoneB) return [];
     return activeA.map((a) => {
-      const tds = trades.filter((t) => (t[safeA] as string[]).includes(a));
+      const tds = trades.filter((t) => getFieldValues(t, safeA).includes(a));
       const w = tds.filter((t) => t.winLose.includes('win')).length;
       const l = tds.filter((t) => t.winLose.includes('lose')).length;
       const be = tds.filter((t) => t.winLose.includes('BRAKEVEN')).length;
@@ -135,7 +139,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
       cells[a] = {};
       for (const b of activeB) {
         const tds = trades.filter(
-          (t) => (t[safeA] as string[]).includes(a) && (t[safeB as TradeArrayField] as string[]).includes(b),
+          (t) => getFieldValues(t, safeA).includes(a) && getFieldValues(t, safeB).includes(b),
         );
         const w = tds.filter((t) => t.winLose.includes('win')).length;
         const l = tds.filter((t) => t.winLose.includes('lose')).length;
@@ -159,7 +163,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
 
   const toggleA = (v: string) => setSelA((p) => p.includes(v) ? p.filter((x) => x !== v) : [...p, v]);
   const toggleB = (v: string) => setSelB((p) => p.includes(v) ? p.filter((x) => x !== v) : [...p, v]);
-  const labelOf = (k: TradeArrayField | 'none') => k === 'none' ? 'ללא' : fields.find((f) => f.key === k)?.label ?? k;
+  const labelOf = (k: string) => k === 'none' ? 'ללא' : fields.find((f) => f.key === k)?.label ?? k;
 
   const hasData = isNoneB
     ? singleStats.length > 0
@@ -211,7 +215,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
           </div>
           <select
             value={safeA}
-            onChange={(e) => { setFieldA(e.target.value as TradeArrayField); setSelA([]); }}
+            onChange={(e) => { setFieldA(e.target.value); setSelA([]); }}
             className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
           >
@@ -252,7 +256,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
           </div>
           <select
             value={safeB}
-            onChange={(e) => { setFieldB(e.target.value as TradeArrayField | 'none'); setSelB([]); }}
+            onChange={(e) => { setFieldB(e.target.value); setSelB([]); }}
             className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
           >
@@ -581,14 +585,25 @@ export default function AnalyticsPage() {
 
   const actual = useMemo(() => getActualTrades(allTrades), [allTrades]);
 
-  const fields = useMemo(() =>
-    BASE_fields
+  const fields = useMemo(() => {
+    const standard = BASE_fields
       .map(f => ({
         key: f.key,
         label: fieldMap ? ((fieldMap[f.mapKey] as string) || f.label) : f.label,
       }))
-      .filter(f => uniqueValues(actual, f.key as TradeArrayField).length > 0),
-  [fieldMap, actual]);
+      .filter(f => uniqueValues(actual, f.key).length > 0);
+
+    const mappedNames = new Set(fieldMap ? Object.values(fieldMap) : []);
+    const extraKeys = new Set<string>();
+    for (const t of actual) for (const k of Object.keys(t.extraFields ?? {})) extraKeys.add(k);
+    const extra = Array.from(extraKeys)
+      .filter(k => !mappedNames.has(k))
+      .map(k => ({ key: `extra:${k}`, label: k }))
+      .filter(f => uniqueValues(actual, f.key).length > 0)
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return [...standard, ...extra];
+  }, [fieldMap, actual]);
 
   // Time analysis
   const timeAnalysis = useMemo(() => {

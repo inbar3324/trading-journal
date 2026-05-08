@@ -147,6 +147,15 @@ export function parseTrade(page: Record<string, unknown>, fieldMap: FieldMap = D
     }
   }
 
+  const mappedNames = new Set(Object.values(fieldMap));
+  const extraFields: Record<string, string[]> = {};
+  for (const [name, val] of Object.entries(p)) {
+    if (!mappedNames.has(name)) {
+      const v = multiSelect(val);
+      if (v.length > 0) extraFields[name] = v;
+    }
+  }
+
   return {
     id: page.id as string,
     url: page.url as string,
@@ -172,6 +181,7 @@ export function parseTrade(page: Record<string, unknown>, fieldMap: FieldMap = D
     oneMTradeLink: (oneMLink?.url as string) ?? null,
     linkToWhatHappenedAfter: (linkAfter?.url as string) ?? null,
     images,
+    extraFields,
   };
 }
 
