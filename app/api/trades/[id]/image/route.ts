@@ -9,7 +9,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const key = (req.headers.get('x-notion-key') ?? process.env.NOTION_API_KEY) as string;
+    const key = req.headers.get('x-notion-key');
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     const auth = `Bearer ${key}`;
 
     const formData = await req.formData();

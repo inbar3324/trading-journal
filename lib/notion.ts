@@ -1,7 +1,6 @@
 import { Client } from '@notionhq/client';
 import type { Trade, TradeInput, NotionSchema } from './types';
 
-const DEFAULT_DB_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
 const NOTION_VERSION = '2025-09-03';
 
 function multiSelect(prop: unknown): string[] {
@@ -94,7 +93,7 @@ function makeClient(creds?: { key?: string }) {
 }
 
 function resolveDbId(creds?: { key?: string; dbId?: string }) {
-  return creds?.dbId ?? process.env.NOTION_DATABASE_ID ?? DEFAULT_DB_ID;
+  return creds?.dbId ?? process.env.NOTION_DATABASE_ID ?? '';
 }
 
 function makeHeaders(key: string) {

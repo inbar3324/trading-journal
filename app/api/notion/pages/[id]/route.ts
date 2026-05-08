@@ -8,6 +8,7 @@ export async function GET(
   try {
     const { id } = await params;
     const key = req.headers.get('x-notion-key') ?? undefined;
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     const page = await getPage(id, { key });
     return NextResponse.json({ page });
   } catch (e) {
@@ -24,6 +25,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
     const key = req.headers.get('x-notion-key') ?? undefined;
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     const page = await updatePage(id, body.patch ?? {}, { key });
     return NextResponse.json({ page });
   } catch (e) {
@@ -39,6 +41,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     const key = req.headers.get('x-notion-key') ?? undefined;
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     await archivePage(id, { key });
     return NextResponse.json({ success: true });
   } catch (e) {

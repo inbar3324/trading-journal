@@ -2,16 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
 import { parseTrade, extractFilePropNames, updateTrade, archiveTrade } from '@/lib/notion';
 
-const DEFAULT_DB_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
-
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
-    const key = req.headers.get('x-notion-key') ?? undefined;
-    const notion = new Client({ auth: key ?? process.env.NOTION_API_KEY, timeoutMs: 8000 });
+    const key = req.headers.get('x-notion-key');
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
+    const notion = new Client({ auth: key, timeoutMs: 8000 });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const page = await (notion.pages as any).retrieve({ page_id: id }) as Record<string, unknown>;
     const trade = parseTrade(page);
@@ -23,8 +22,6 @@ export async function GET(
   }
 }
 
-void DEFAULT_DB_ID;
-
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -34,6 +31,7 @@ export async function PATCH(
     const body = await req.json();
     const key = req.headers.get('x-notion-key') ?? undefined;
     const dbId = req.headers.get('x-notion-db') ?? undefined;
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     const trade = await updateTrade(id, body, { key, dbId });
     return NextResponse.json({ trade });
   } catch (e) {
@@ -50,6 +48,7 @@ export async function DELETE(
     const { id } = await params;
     const key = req.headers.get('x-notion-key') ?? undefined;
     const dbId = req.headers.get('x-notion-db') ?? undefined;
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     await archiveTrade(id, { key, dbId });
     return NextResponse.json({ success: true });
   } catch (e) {

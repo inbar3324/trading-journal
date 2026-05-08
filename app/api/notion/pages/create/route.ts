@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const { realDbId, patch } = body as { realDbId?: string; patch: Record<string, unknown> };
     const key = req.headers.get('x-notion-key') ?? undefined;
     const dbId = req.headers.get('x-notion-db') ?? undefined;
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
     const page = await createPage(
       patch as Parameters<typeof createPage>[0],
       { key, dbId },

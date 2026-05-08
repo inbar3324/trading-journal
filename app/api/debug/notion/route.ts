@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
 
-const DEFAULT_DB_ID = '2e08160b-8d3f-81ec-87ce-000b07c34e0e';
-
 export async function GET(request: Request) {
-  const key = request.headers.get('x-notion-key') ?? process.env.NOTION_API_KEY ?? '';
-  const dataSourceId = request.headers.get('x-notion-db') ?? process.env.NOTION_DATABASE_ID ?? DEFAULT_DB_ID;
+  const key = request.headers.get('x-notion-key') ?? '';
+  const dataSourceId = request.headers.get('x-notion-db') ?? '';
+  if (!key || !dataSourceId) {
+    return NextResponse.json({ error: 'Missing x-notion-key or x-notion-db header' }, { status: 401 });
+  }
 
   const notion = new Client({ auth: key, timeoutMs: 10000 });
   const notionHeaders = {

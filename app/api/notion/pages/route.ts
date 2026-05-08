@@ -5,6 +5,7 @@ export async function GET(request: Request) {
   const key = request.headers.get('x-notion-key') ?? undefined;
   const dbId = request.headers.get('x-notion-db') ?? undefined;
   const realDbHeader = request.headers.get('x-notion-realdb') ?? undefined;
+  if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
   try {
     const [{ pages, realDbId }, schema] = await Promise.all([
       getAllPages({ key, dbId }),
