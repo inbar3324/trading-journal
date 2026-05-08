@@ -437,7 +437,7 @@ export async function archiveTrade(pageId: string, creds?: { key?: string; dbId?
   await (notion.pages as any).update({ page_id: pageId, archived: true });
 }
 
-export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<{ trades: Trade[]; realDbId: string; dbTitle: string }> {
+export async function getAllTrades(creds?: { key?: string; dbId?: string }): Promise<{ trades: Trade[]; realDbId: string; dbTitle: string; fieldMap: FieldMap }> {
   const notion = makeClient(creds);
   const dataSourceId = resolveDbId(creds);
   const key = creds?.key ?? process.env.NOTION_API_KEY ?? '';
@@ -544,5 +544,5 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
     }
   } catch { /* ignore */ }
 
-  return { trades, realDbId, dbTitle };
+  return { trades, realDbId, dbTitle, fieldMap: fieldMap ?? DEFAULT_FIELD_MAP };
 }

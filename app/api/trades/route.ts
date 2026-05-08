@@ -6,8 +6,8 @@ export async function GET(request: Request) {
   const dbId = request.headers.get('x-notion-db')   ?? undefined;
   if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
   try {
-    const { trades, realDbId, dbTitle } = await getAllTrades({ key, dbId });
-    return NextResponse.json({ trades, realDbId, dbTitle }, {
+    const { trades, realDbId, dbTitle, fieldMap } = await getAllTrades({ key, dbId });
+    return NextResponse.json({ trades, realDbId, dbTitle, fieldMap }, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err) {

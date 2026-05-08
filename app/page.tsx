@@ -217,6 +217,17 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
       }
       map.set(t.date, existing);
     }
+    // Fallback: if no day is marked as trade day (client DB has no tookTrade field),
+    // treat all days with entries as trade days
+    const anyTrade = [...map.values()].some(d => d.isTrade);
+    if (!anyTrade) {
+      for (const day of map.values()) {
+        if (day.entries.length > 0) {
+          day.isTrade = true;
+          day.totalPnl = day.entries.reduce((s, t) => s + (t.pnl ?? 0), 0);
+        }
+      }
+    }
     return map;
   }, [allTrades]);
 

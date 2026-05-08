@@ -5,7 +5,7 @@ import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, CartesianGrid, Legend, ReferenceLine,
 } from 'recharts';
-import type { Trade } from '@/lib/types';
+import type { Trade, FieldMap } from '@/lib/types';
 import { getActualTrades } from '@/lib/utils';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
@@ -14,18 +14,18 @@ type TradeArrayField =
   | 'indices' | 'longShort' | 'day' | 'reversalContinuation'
   | 'rulesFeelings' | 'news' | 'rateTrade';
 
-const FIELDS: { key: TradeArrayField; label: string }[] = [
-  { key: 'poi',                  label: 'POI' },
-  { key: 'biasForTheDay',        label: 'Bias' },
-  { key: 'drawInLiquidity',      label: 'Draw on Liquidity' },
-  { key: 'lowerTimeEntry',       label: 'Entry Type' },
-  { key: 'indices',              label: 'Index' },
-  { key: 'longShort',            label: 'Direction' },
-  { key: 'day',                  label: 'Day of Week' },
-  { key: 'reversalContinuation', label: 'Reversal/Cont.' },
-  { key: 'rulesFeelings',        label: 'Psychology' },
-  { key: 'news',                 label: 'News' },
-  { key: 'rateTrade',            label: 'Trade Rating' },
+const BASE_fields: { key: TradeArrayField; mapKey: keyof FieldMap; label: string }[] = [
+  { key: 'poi',                  mapKey: 'poi',                  label: 'POI' },
+  { key: 'biasForTheDay',        mapKey: 'biasForDay',           label: 'Bias' },
+  { key: 'drawInLiquidity',      mapKey: 'drawInLiquidity',      label: 'Draw on Liquidity' },
+  { key: 'lowerTimeEntry',       mapKey: 'lowerTimeEntry',       label: 'Entry Type' },
+  { key: 'indices',              mapKey: 'indices',              label: 'Index' },
+  { key: 'longShort',            mapKey: 'direction',            label: 'Direction' },
+  { key: 'day',                  mapKey: 'day',                  label: 'Day of Week' },
+  { key: 'reversalContinuation', mapKey: 'reversalContinuation', label: 'Reversal/Cont.' },
+  { key: 'rulesFeelings',        mapKey: 'rulesFeelings',        label: 'Psychology' },
+  { key: 'news',                 mapKey: 'news',                 label: 'News' },
+  { key: 'rateTrade',            mapKey: 'rateTrade',            label: 'Trade Rating' },
 ];
 
 const PALETTE = [
@@ -90,7 +90,7 @@ function parseTime(raw: string): { hour: number; min: number; totalMin: number }
 
 // ── Data Explorer (cross-reference) ──────────────────────────────────────────
 
-function DataExplorer({ trades }: { trades: Trade[] }) {
+function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: TradeArrayField; label: string }[] }) {
   const [fieldA, setFieldA] = useState<TradeArrayField>('biasForTheDay');
   const [fieldB, setFieldB] = useState<TradeArrayField | 'none'>('news');
   const [selA, setSelA] = useState<string[]>([]);
@@ -153,7 +153,7 @@ function DataExplorer({ trades }: { trades: Trade[] }) {
 
   const toggleA = (v: string) => setSelA((p) => p.includes(v) ? p.filter((x) => x !== v) : [...p, v]);
   const toggleB = (v: string) => setSelB((p) => p.includes(v) ? p.filter((x) => x !== v) : [...p, v]);
-  const labelOf = (k: TradeArrayField | 'none') => k === 'none' ? 'ללא' : FIELDS.find((f) => f.key === k)?.label ?? k;
+  const labelOf = (k: TradeArrayField | 'none') => k === 'none' ? 'ללא' : fields.find((f) => f.key === k)?.label ?? k;
 
   const hasData = isNoneB
     ? singleStats.length > 0
@@ -209,7 +209,7 @@ function DataExplorer({ trades }: { trades: Trade[] }) {
             className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
           >
-            {FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+            {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
           <div className="flex flex-wrap gap-1.5">
             {valuesA.map((v) => {
@@ -251,7 +251,7 @@ function DataExplorer({ trades }: { trades: Trade[] }) {
             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
           >
             <option value="none">— ללא (ניתוח יחיד) —</option>
-            {FIELDS.filter((f) => f.key !== fieldA).map((f) => (
+            {fields.filter((f) => f.key !== fieldA).map((f) => (
               <option key={f.key} value={f.key}>{f.label}</option>
             ))}
           </select>
@@ -555,6 +555,7 @@ export default function AnalyticsPage() {
   const [allTrades, setAllTrades] = useState<Trade[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
+  const [fieldMap, setFieldMap]   = useState<FieldMap | null>(null);
 
   const [newsOpen, setNewsOpen]             = useState(false);
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
@@ -566,10 +567,18 @@ export default function AnalyticsPage() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setAllTrades(data.trades);
+        if (data.fieldMap) setFieldMap(data.fieldMap);
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const fields = useMemo(() =>
+    BASE_fields.map(f => ({
+      key: f.key,
+      label: fieldMap ? (fieldMap[f.mapKey] as string) : f.label,
+    })),
+  [fieldMap]);
 
   const actual = useMemo(() => getActualTrades(allTrades), [allTrades]);
 
@@ -689,7 +698,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ═══ DATA EXPLORER ═══ */}
-      <DataExplorer trades={actual} />
+      <DataExplorer trades={actual} fields={fields} />
 
       {/* ═══ NEWS IMPACT ═══ */}
       <div
