@@ -14,7 +14,7 @@ import {
 import KpiCard from '@/components/ui/KpiCard';
 import PnlChart from '@/components/charts/PnlChart';
 import { AlertTriangle } from 'lucide-react';
-import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
+import { getNotionConfig, notionHeaders, saveNotionConfig } from '@/lib/notion-config';
 
 const RANGES: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', 'last_month', '3_months', 'this_year', 'all'];
 
@@ -32,6 +32,7 @@ export default function DashboardPage() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setAllTrades(data.trades);
+        if (data.fieldMap) { const cfg = getNotionConfig(); if (cfg) saveNotionConfig({ ...cfg, fieldMap: data.fieldMap }); }
       })
       .catch((e: Error) => setError(
         e.name === 'AbortError' ? 'הבקשה לקחה יותר מדי זמן — נסה לרענן' : e.message

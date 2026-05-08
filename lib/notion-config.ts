@@ -1,7 +1,10 @@
+import type { FieldMap } from './types';
+
 export interface NotionConfig {
   key: string;
   dbId: string;
   realDbId?: string;
+  fieldMap?: FieldMap;
 }
 
 const STORAGE_KEY = 'tj_notion';
@@ -30,5 +33,6 @@ export function notionHeaders(cfg: NotionConfig | null): Record<string, string> 
   if (!cfg) return {};
   const h: Record<string, string> = { 'x-notion-key': cfg.key, 'x-notion-db': cfg.dbId };
   if (cfg.realDbId) h['x-notion-realdb'] = cfg.realDbId;
+  if (cfg.fieldMap) h['x-notion-fieldmap'] = JSON.stringify(cfg.fieldMap);
   return h;
 }

@@ -7,7 +7,7 @@ import {
   filterByDateRange, toISODate, getWeekStart,
   getDateRangeBounds, DATE_RANGE_LABELS, type DateRange,
 } from '@/lib/utils';
-import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
+import { getNotionConfig, notionHeaders, saveNotionConfig } from '@/lib/notion-config';
 
 const PRESETS: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
 
@@ -90,6 +90,7 @@ export default function WeeklyPage() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setAllTrades(data.trades);
+        if (data.fieldMap) { const cfg = getNotionConfig(); if (cfg) saveNotionConfig({ ...cfg, fieldMap: data.fieldMap }); }
       })
       .finally(() => setLoading(false));
   }, []);

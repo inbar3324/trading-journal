@@ -201,40 +201,41 @@ function rt(content: string) {
     : { rich_text: [] };
 }
 
-function buildProperties(input: TradeInput): Record<string, unknown> {
+function buildProperties(input: TradeInput, fm: FieldMap = DEFAULT_FIELD_MAP): Record<string, unknown> {
   const p: Record<string, unknown> = {};
-  if (input.date !== undefined) p['Date'] = input.date ? { date: { start: input.date } } : { date: null };
-  if (input.day !== undefined) p['day'] = ms(input.day);
-  if (input.time !== undefined) p['TIME'] = rt(input.time);
-  if (input.tookTrade !== undefined) p['Took a trade today?'] = ms(input.tookTrade);
-  if (input.indices !== undefined) p['indices'] = ms(input.indices);
-  if (input.longShort !== undefined) p['long/short'] = ms(input.longShort);
-  if (input.news !== undefined) p['NEWS'] = ms(input.news);
-  if (input.reversalContinuation !== undefined) p['reversal/continuation '] = ms(input.reversalContinuation);
-  if (input.drawInLiquidity !== undefined) p['draw in liquidity'] = ms(input.drawInLiquidity);
-  if (input.poi !== undefined) p['POI'] = ms(input.poi);
-  if (input.lowerTimeEntry !== undefined) p['LOWER TIME ENTRY'] = ms(input.lowerTimeEntry);
-  if (input.rulesFeelings !== undefined) p['RULES/feeling'] = ms(input.rulesFeelings);
-  if (input.trend !== undefined) p['TREND'] = ms(input.trend);
-  if (input.biasForTheDay !== undefined) p['BIAS FOR THE DAY'] = ms(input.biasForTheDay);
-  if (input.rateTrade !== undefined) p['RATE TRADE'] = ms(input.rateTrade);
-  if (input.winLose !== undefined) p['win/lose'] = ms(input.winLose);
-  if (input.pnl !== undefined) p['PNL'] = { number: input.pnl };
+  if (input.date !== undefined) p[fm.date] = input.date ? { date: { start: input.date } } : { date: null };
+  if (input.day !== undefined) p[fm.day] = ms(input.day);
+  if (input.time !== undefined) p[fm.time] = rt(input.time);
+  if (input.tookTrade !== undefined) p[fm.tookTrade] = ms(input.tookTrade);
+  if (input.indices !== undefined) p[fm.indices] = ms(input.indices);
+  if (input.longShort !== undefined) p[fm.direction] = ms(input.longShort);
+  if (input.news !== undefined) p[fm.news] = ms(input.news);
+  if (input.reversalContinuation !== undefined) p[fm.reversalContinuation] = ms(input.reversalContinuation);
+  if (input.drawInLiquidity !== undefined) p[fm.drawInLiquidity] = ms(input.drawInLiquidity);
+  if (input.poi !== undefined) p[fm.poi] = ms(input.poi);
+  if (input.lowerTimeEntry !== undefined) p[fm.lowerTimeEntry] = ms(input.lowerTimeEntry);
+  if (input.rulesFeelings !== undefined) p[fm.rulesFeelings] = ms(input.rulesFeelings);
+  if (input.trend !== undefined) p[fm.trend] = ms(input.trend);
+  if (input.biasForTheDay !== undefined) p[fm.biasForDay] = ms(input.biasForTheDay);
+  if (input.rateTrade !== undefined) p[fm.rateTrade] = ms(input.rateTrade);
+  if (input.winLose !== undefined) p[fm.winLose] = ms(input.winLose);
+  if (input.pnl !== undefined) p[fm.pnl] = { number: input.pnl };
   if (input.notes !== undefined) {
     const text = input.notes ?? '';
-    p['NOTES!'] = text ? { title: [{ text: { content: text } }] } : { title: [] };
+    p[fm.notes] = text ? { title: [{ text: { content: text } }] } : { title: [] };
   }
-  if (input.tradeIdeaLink !== undefined) p['TRADE  IDEA LINK'] = { url: input.tradeIdeaLink || null };
-  if (input.oneMTradeLink !== undefined) p['1M trade link'] = { url: input.oneMTradeLink || null };
-  if (input.linkToWhatHappenedAfter !== undefined) p['link to what happend after'] = { url: input.linkToWhatHappenedAfter || null };
+  if (input.tradeIdeaLink !== undefined) p[fm.tradeIdeaLink] = { url: input.tradeIdeaLink || null };
+  if (input.oneMTradeLink !== undefined) p[fm.oneMLink] = { url: input.oneMTradeLink || null };
+  if (input.linkToWhatHappenedAfter !== undefined) p[fm.linkAfter] = { url: input.linkToWhatHappenedAfter || null };
   return p;
 }
 
 export async function getTrade(pageId: string, creds?: { key?: string; dbId?: string }): Promise<Trade> {
   const notion = makeClient(creds);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const page = await (notion.pages as any).retrieve({ page_id: pageId });
-  return parseTrade(page as Record<string, unknown>);
+  const page = await (notion.pages as any).retrieve({ page_id: pageId }) as Record<string, unknown>;
+  const fm = buildFieldMap((page.properties ?? {}) as Record<string, { type: string }>);
+  return parseTrade(page, fm);
 }
 
 // Discovers the real database_id behind a connector/data-source ID.
@@ -353,16 +354,18 @@ export async function createTrade(
   input: TradeInput,
   creds?: { key?: string; dbId?: string },
   realDbId?: string,
+  fieldMap?: FieldMap,
 ): Promise<Trade> {
   const key = creds?.key ?? process.env.NOTION_API_KEY ?? '';
   const dataSourceId = resolveDbId(creds);
   const headers = makeHeaders(key);
   const norm = (id: string) => id.replace(/-/g, '').toLowerCase();
   const tried = new Set<string>();
+  const fm = fieldMap ?? DEFAULT_FIELD_MAP;
 
   // tryCreate: POST to /v1/pages with given parent, stripping unknown props on retry
   const tryCreate = async (parentObj: Record<string, unknown>): Promise<Trade> => {
-    let props = buildProperties(input);
+    let props = buildProperties(input, fm);
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const res = await fetch('https://api.notion.com/v1/pages', {
@@ -374,7 +377,8 @@ export async function createTrade(
           const err = await res.json() as Record<string, unknown>;
           throw new Error((err.message as string) ?? `HTTP ${res.status}`);
         }
-        return parseTrade(await res.json() as Record<string, unknown>);
+        const json = await res.json() as Record<string, unknown>;
+        return parseTrade(json, buildFieldMap((json.properties ?? {}) as Record<string, { type: string }>));
       } catch (e) {
         if (!(e instanceof Error && e.message.includes('is not a property that exists'))) throw e;
         const invalid = new Set<string>();
@@ -421,14 +425,15 @@ export async function createTrade(
   throw new Error('Cannot create journal entry: could not determine a writable Notion database ID.');
 }
 
-export async function updateTrade(pageId: string, input: TradeInput, creds?: { key?: string; dbId?: string }): Promise<Trade> {
+export async function updateTrade(pageId: string, input: TradeInput, creds?: { key?: string; dbId?: string }, fieldMap?: FieldMap): Promise<Trade> {
   const notion = makeClient(creds);
+  const fm = fieldMap ?? DEFAULT_FIELD_MAP;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const page = await (notion.pages as any).update({
     page_id: pageId,
-    properties: buildProperties(input),
-  });
-  return parseTrade(page as Record<string, unknown>);
+    properties: buildProperties(input, fm),
+  }) as Record<string, unknown>;
+  return parseTrade(page, buildFieldMap((page.properties ?? {}) as Record<string, { type: string }>));
 }
 
 export async function archiveTrade(pageId: string, creds?: { key?: string; dbId?: string }): Promise<void> {

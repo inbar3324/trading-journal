@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import type { Trade, FieldMap } from '@/lib/types';
 import { getActualTrades } from '@/lib/utils';
-import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
+import { getNotionConfig, notionHeaders, saveNotionConfig } from '@/lib/notion-config';
 
 type TradeArrayField =
   | 'poi' | 'biasForTheDay' | 'drawInLiquidity' | 'lowerTimeEntry'
@@ -567,7 +567,7 @@ export default function AnalyticsPage() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setAllTrades(data.trades);
-        if (data.fieldMap) setFieldMap(data.fieldMap);
+        if (data.fieldMap) { setFieldMap(data.fieldMap); const cfg = getNotionConfig(); if (cfg) saveNotionConfig({ ...cfg, fieldMap: data.fieldMap }); }
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
