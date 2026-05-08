@@ -25,13 +25,20 @@ export async function POST(request: Request) {
   let weekEnd = '';
   let freeNotes = '';
 
+  let noTradesMode = false;
+  let historicalTrades: Trade[] = [];
+  let noTradesReasons: string[] = [];
+
   try {
     const body = await request.json();
-    trades         = body.trades         ?? [];
-    journalEntries = body.journalEntries;
-    weekStart      = body.weekStart      ?? '';
-    weekEnd        = body.weekEnd        ?? '';
-    freeNotes      = body.freeNotes      ?? '';
+    trades           = body.trades           ?? [];
+    journalEntries   = body.journalEntries;
+    weekStart        = body.weekStart        ?? '';
+    weekEnd          = body.weekEnd          ?? '';
+    freeNotes        = body.freeNotes        ?? '';
+    noTradesMode     = body.noTradesMode     ?? false;
+    historicalTrades = body.historicalTrades ?? [];
+    noTradesReasons  = body.noTradesReasons  ?? [];
   } catch {
     return Response.json({ error: 'שגיאה בקריאת הנתונים' }, { status: 400 });
   }
@@ -41,6 +48,116 @@ export async function POST(request: Request) {
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
   ].filter((k): k is string => !!k?.startsWith('AIza'));
+
+  if (noTradesMode) {
+    const journalBlock = (journalEntries ?? [])
+      .filter((t) => t.notes?.trim())
+      .map((t) => `${t.date} — ${t.notes!.trim()}`)
+      .join('\n') || '(אין רשומות יומן בתקופה זו)';
+
+    const historyBlock = historicalTrades.length > 0
+      ? historicalTrades.map((t) => {
+          const res = t.winLose[0] ?? '?';
+          const pnl = t.pnl != null ? `${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}` : '—';
+          return `${t.date} | ${res} | ${pnl}${t.notes?.trim() ? ` | ${t.notes.trim()}` : ''}`;
+        }).join('\n')
+      : '(אין עסקאות היסטוריות)';
+
+    const reasonsLine = noTradesReasons.length > 0
+      ? noTradesReasons.join(', ')
+      : '(לא נבחרו)';
+
+    if (apiKeys.length === 0) {
+      return Response.json({
+        summary: `## מה קרה\nלא בוצעו עסקאות בתקופה ${weekStart} עד ${weekEnd}.\n\n## דפוס אפשרי\nאין מספיק נתונים לניתוח אוטומטי.\n\n## המלצה\nהוסף הערות ולחץ Generate לניתוח מעמיק.`,
+        source: 'stats',
+      });
+    }
+
+    const noTradesSystemPrompt = `You are a professional trading mentor. The trader had ZERO executed trades in this period.
+Your job: analyze why they didn't trade and whether there's a repeating behavioral pattern.
+
+Write in Hebrew (second person). Be evidence-based — only mention patterns if the journal entries or history actually support them. If data is insufficient, say so plainly. No generic advice.`;
+
+    const noTradesUserPrompt = `תקופה ללא עסקאות: ${weekStart} עד ${weekEnd}
+
+יומן התקופה:
+${journalBlock}
+
+סיבות שסומנו על ידי הסוחר:
+${reasonsLine}
+
+הערות הסוחר:
+${freeNotes.trim() || '(לא נכתב)'}
+
+15 העסקאות האחרונות לפני התקופה:
+${historyBlock}
+
+---
+כתוב בדיוק שלושה סעיפים, כל אחד 2-3 משפטים:
+
+## מה קרה
+תאר את ימי ההיעדר — מה עולה מהיומן, מהסיבות שנבחרו, ומההקשר ההיסטורי.
+
+## דפוס אפשרי
+האם יש סיבה עקבית להיעדר המסחר? לדוגמא: הפסדים רצופים לפני התקופה, ימים מסוימים, תנאי שוק. אם אין מידע מספיק — כתוב "אין מספיק נתונים לאיתור דפוס".
+
+## המלצה
+פעולה אחת ספציפית — האם כדאי לחזור לסחור? כיצד? מה לשים לב אליו?`;
+
+    const noTradesBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: noTradesSystemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: noTradesUserPrompt }] }],
+      generationConfig: { maxOutputTokens: 600, temperature: 0.7, thinkingConfig: { thinkingBudget: 0 } },
+    });
+
+    try {
+      let geminiRes: Response | null = null;
+      for (const apiKey of apiKeys) {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: noTradesBody }
+        );
+        if (res.ok && res.body) { geminiRes = res; break; }
+      }
+      if (!geminiRes) throw new Error('All keys failed');
+
+      const reader  = geminiRes.body!.getReader();
+      const decoder = new TextDecoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          let buffer = '';
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() ?? '';
+              for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const json = line.slice(6).trim();
+                if (!json || json === '[DONE]') continue;
+                try {
+                  const chunk = JSON.parse(json);
+                  const text  = chunk.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+                  if (text) controller.enqueue(new TextEncoder().encode(text));
+                } catch { /* skip */ }
+              }
+            }
+          } finally { controller.close(); }
+        },
+      });
+      return new Response(stream, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Summary-Source': 'ai', 'Cache-Control': 'no-cache' },
+      });
+    } catch {
+      return Response.json({
+        summary: `## מה קרה\nלא בוצעו עסקאות בתקופה ${weekStart} עד ${weekEnd}.\n\n## דפוס אפשרי\nאין מספיק נתונים לניתוח אוטומטי.\n\n## המלצה\nהוסף הערות ולחץ Generate לניתוח מעמיק.`,
+        source: 'stats',
+      });
+    }
+  }
 
   if (apiKeys.length === 0) {
     const summary = generateStatsSummary(trades, weekStart, weekEnd);

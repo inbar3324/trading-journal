@@ -5,11 +5,17 @@ import type { Trade } from '@/lib/types';
 import {
   getActualTrades, calculateStats, formatPnl,
   filterByDateRange, toISODate, getWeekStart,
-  DATE_RANGE_LABELS, type DateRange,
+  getDateRangeBounds, DATE_RANGE_LABELS, type DateRange,
 } from '@/lib/utils';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
 const PRESETS: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
+
+const NO_TRADE_REASONS = [
+  'תנאי שוק לא מתאימים', 'הפסד גדול לפני', 'מצב נפשי / עייפות',
+  'חופשה / ימים אישיים', 'חדשות / אירוע מאקרו', 'חוסר ביטחון בתוכנית',
+  'בעיות טכניות', 'לא ראיתי סטאפ',
+];
 
 function SummaryRenderer({ text }: { text: string }) {
   const lines = text.split('\n');
@@ -75,6 +81,8 @@ export default function WeeklyPage() {
   const [summaryError, setSummaryError]     = useState<string | null>(null);
   const [freeNotes, setFreeNotes]           = useState('');
   const [showTrades, setShowTrades]         = useState(false);
+  const [noTradesNotes, setNoTradesNotes]   = useState('');
+  const [noTradesReasons, setNoTradesReasons] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/trades', { headers: notionHeaders(getNotionConfig()) })
@@ -103,8 +111,9 @@ export default function WeeklyPage() {
   const [periodStart, periodEnd] = useMemo(() => {
     if (mode === 'custom') return [customFrom, customTo];
     const dates = periodTrades.map((t) => t.date).filter(Boolean) as string[];
-    return [dates[0] ?? '', dates[dates.length - 1] ?? ''];
-  }, [mode, customFrom, customTo, periodTrades]);
+    if (dates.length > 0) return [dates[0], dates[dates.length - 1]];
+    return getDateRangeBounds(range);
+  }, [mode, customFrom, customTo, periodTrades, range]);
 
   // Day-by-day grid only for single-week presets
   const isWeekView = mode === 'preset' && (range === 'this_week' || range === 'last_week');
@@ -117,11 +126,18 @@ export default function WeeklyPage() {
 
   const stats = calculateStats(periodTrades);
 
+  const periodJournalEntries = useMemo(() => {
+    if (!periodStart || !periodEnd) return [];
+    return allTrades.filter((t) => t.date && t.date >= periodStart && t.date <= periodEnd);
+  }, [allTrades, periodStart, periodEnd]);
+
   // Clear summary when period changes
   useEffect(() => {
     setSummary('');
     setSummaryError(null);
     setSummarySource(null);
+    setNoTradesNotes('');
+    setNoTradesReasons([]);
   }, [range, mode, customFrom, customTo]);
 
   // Auto-generate summary when trades load
@@ -178,6 +194,22 @@ export default function WeeklyPage() {
     const end     = dates[dates.length - 1] ?? '';
     const journal = all.filter((t) => t.date && start && end && t.date >= start && t.date <= end);
     await callSummary({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes });
+  }
+
+  async function generateEmptyPeriodSummary() {
+    const historicalTrades = getActualTrades(allTrades)
+      .filter((t) => t.date && periodStart && t.date < periodStart)
+      .slice(-15);
+    await callSummary({
+      trades: [],
+      journalEntries: periodJournalEntries,
+      weekStart: periodStart,
+      weekEnd: periodEnd,
+      freeNotes: noTradesNotes,
+      noTradesMode: true,
+      historicalTrades,
+      noTradesReasons,
+    });
   }
 
   async function generateSummary() {
@@ -298,11 +330,132 @@ export default function WeeklyPage() {
         )}
       </div>
 
-      {/* Empty state */}
+      {/* No-trades RECAP / normal RECAP */}
       {periodTrades.length === 0 ? (
-        <div className="rounded-xl p-8 text-center"
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
-          <div style={{ color: 'var(--text-secondary)' }}>לא נרשמו עסקאות בתקופה: <strong style={{ color: 'var(--text-primary)' }}>{periodLabel}</strong></div>
+        <div className="space-y-5">
+          {/* Info card */}
+          <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 4 }}>0 עסקאות — ניתוח ימי היעדר</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: periodJournalEntries.length > 0 ? 16 : 0 }}>
+              לא נרשמו עסקאות בתקופה: <strong style={{ color: 'var(--text-primary)' }}>{periodLabel}</strong>
+            </div>
+            {periodJournalEntries.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text-muted)', marginBottom: 8 }}>רשומות יומן בתקופה</div>
+                <div className="space-y-2">
+                  {periodJournalEntries.map((t) => (
+                    <div key={t.id} className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)' }}>
+                      <span className="tabular" style={{ color: 'var(--text-secondary)' }}>{t.date}</span>
+                      {t.notes?.trim() && <span style={{ color: 'var(--text-primary)', marginRight: 8 }}> — {t.notes.trim()}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Reasons + notes + AI */}
+          <div className="rounded-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 12 }}>למה לא סחרת?</div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {NO_TRADE_REASONS.map((reason) => {
+                const active = noTradesReasons.includes(reason);
+                return (
+                  <button
+                    key={reason}
+                    onClick={() => setNoTradesReasons((prev) => prev.includes(reason) ? prev.filter((r) => r !== reason) : [...prev, reason])}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                    style={{
+                      background: active ? 'var(--blue)' : 'var(--bg-surface)',
+                      color: active ? 'white' : 'var(--text-secondary)',
+                      border: `1px solid ${active ? 'var(--blue)' : 'var(--border-color)'}`,
+                      transition: 'all 160ms var(--ease-out)',
+                      boxShadow: active ? '0 1px 4px rgba(59,130,246,0.3)' : 'none',
+                    }}
+                  >
+                    {reason}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea
+              value={noTradesNotes}
+              onChange={(e) => setNoTradesNotes(e.target.value)}
+              placeholder="פרט נוסף... (אופציונלי)"
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-lg text-sm outline-none resize-none mb-5"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', lineHeight: 1.7 }}
+              dir="rtl"
+            />
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                    {summarySource === 'ai' ? 'AI Summary' : 'ניתוח ימי היעדר'}
+                  </div>
+                  {summarySource && (
+                    <span style={{
+                      fontSize: 11,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: summarySource === 'ai' ? 'var(--purple-dim)' : 'var(--blue-dim)',
+                      color: summarySource === 'ai' ? 'var(--purple)' : 'var(--blue)',
+                      border: `1px solid ${summarySource === 'ai' ? 'rgba(124,58,237,0.28)' : 'rgba(59,130,246,0.22)'}`,
+                    }}>
+                      {summarySource === 'ai' ? 'Gemini 2.5 Flash' : 'Statistical'}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, marginTop: 3, color: 'var(--text-secondary)' }}>
+                  ניתוח אוטומטי לתקופה: {periodLabel}
+                </div>
+              </div>
+              <button
+                onClick={generateEmptyPeriodSummary}
+                disabled={summaryLoading}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
+                  background: 'var(--blue)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: summaryLoading ? 'wait' : 'pointer',
+                  opacity: summaryLoading ? 0.45 : 1,
+                  transition: 'all 160ms var(--ease-out)',
+                  boxShadow: '0 1px 0 rgba(255,255,255,0.08) inset, 0 3px 12px rgba(59,130,246,0.18)',
+                }}
+                onMouseDown={(e) => { if (!summaryLoading) e.currentTarget.style.transform = 'scale(0.97) translateY(1px)'; }}
+                onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1) translateY(0)'; }}
+              >
+                {summaryLoading ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+            {summaryError && (
+              <div className="text-xs p-3 rounded-lg" style={{ background: 'rgba(248,113,113,0.1)', color: 'var(--red)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                שגיאה: {summaryError}
+              </div>
+            )}
+            {summaryLoading && !summary && (
+              <div style={{ padding: '32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--purple)', opacity: 0.7, animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Gemini מנתח...</div>
+              </div>
+            )}
+            {summary && <SummaryRenderer text={summary} />}
+            {!summary && !summaryLoading && !summaryError && (
+              <div className="text-sm text-center py-8 rounded-lg" style={{ background: 'var(--bg-surface)', color: 'var(--text-secondary)' }}>
+                לחץ על &ldquo;Generate&rdquo; לניתוח ימי ההיעדר
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <>

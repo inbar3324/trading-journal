@@ -177,6 +177,39 @@ export function filterByDateRange(trades: Trade[], range: DateRange): Trade[] {
   }
 }
 
+export function getDateRangeBounds(range: DateRange): [string, string] {
+  const now = new Date();
+  const today = toISODate(now);
+  switch (range) {
+    case 'today': return [today, today];
+    case 'this_week': {
+      const start = toISODate(getWeekStart(now));
+      const end = toISODate(addDaysToDate(getWeekStart(now), 4));
+      return [start, end];
+    }
+    case 'last_week': {
+      const lastMonday = getWeekStart(addDaysToDate(now, -7));
+      return [toISODate(lastMonday), toISODate(addDaysToDate(lastMonday, 4))];
+    }
+    case 'this_month': {
+      const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      return [start, today];
+    }
+    case 'last_month': {
+      const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return [toISODate(firstOfLastMonth), toISODate(new Date(firstOfThisMonth.getTime() - 86400000))];
+    }
+    case '3_months': {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 3);
+      return [toISODate(d), today];
+    }
+    case 'this_year': return [`${now.getFullYear()}-01-01`, today];
+    case 'all': default: return ['2000-01-01', today];
+  }
+}
+
 // ── Correlation matrix ────────────────────────────────────────────────────────
 
 export interface CorrelationCell {
