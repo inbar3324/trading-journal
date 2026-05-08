@@ -97,40 +97,36 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
   const [selB, setSelB] = useState<string[]>([]);
   const [view, setView] = useState<'matrix' | 'chart'>('matrix');
 
-  useEffect(() => {
-    if (fields.length > 0 && !fields.find(f => f.key === fieldA))
-      setFieldA(fields[0].key as TradeArrayField);
-  }, [fields, fieldA]);
+  // Derive safe field values — fall back to first available if current selection has no data
+  const safeA: TradeArrayField = fields.find(f => f.key === fieldA)
+    ? fieldA : (fields[0]?.key as TradeArrayField ?? fieldA);
+  const safeB: TradeArrayField | 'none' = fieldB === 'none' || fields.find(f => f.key === fieldB)
+    ? fieldB : (fields.length > 1 ? fields[1].key as TradeArrayField : 'none');
 
-  useEffect(() => {
-    if (fieldB !== 'none' && !fields.find(f => f.key === fieldB))
-      setFieldB(fields.length > 1 ? fields[1].key as TradeArrayField : 'none');
-  }, [fields, fieldB]);
+  const isNoneB = safeB === 'none';
 
-  const isNoneB = fieldB === 'none';
-
-  const valuesA = useMemo(() => uniqueValues(trades, fieldA), [trades, fieldA]);
-  const valuesB = useMemo(() => isNoneB ? [] : uniqueValues(trades, fieldB as TradeArrayField), [trades, fieldB, isNoneB]);
+  const valuesA = useMemo(() => uniqueValues(trades, safeA), [trades, safeA]);
+  const valuesB = useMemo(() => isNoneB ? [] : uniqueValues(trades, safeB as TradeArrayField), [trades, safeB, isNoneB]);
 
   // Reset selections when field changes
-  useMemo(() => { setSelA([]); }, [fieldA]); // eslint-disable-line
-  useMemo(() => { setSelB([]); }, [fieldB]); // eslint-disable-line
+  useMemo(() => { setSelA([]); }, [safeA]); // eslint-disable-line
+  useMemo(() => { setSelB([]); }, [safeB]); // eslint-disable-line
 
   const activeA = selA.length > 0 ? selA : valuesA;
   const activeB = selB.length > 0 ? selB : valuesB;
 
-  // Single-field stats (when fieldB === 'none')
+  // Single-field stats (when safeB === 'none')
   const singleStats = useMemo(() => {
     if (!isNoneB) return [];
     return activeA.map((a) => {
-      const tds = trades.filter((t) => (t[fieldA] as string[]).includes(a));
+      const tds = trades.filter((t) => (t[safeA] as string[]).includes(a));
       const w = tds.filter((t) => t.winLose.includes('win')).length;
       const l = tds.filter((t) => t.winLose.includes('lose')).length;
       const be = tds.filter((t) => t.winLose.includes('BRAKEVEN')).length;
       const d = w + l;
       return { label: a, wins: w, losses: l, be, total: tds.length, winRate: d > 0 ? Math.round(w / d * 100) : null };
     }).filter((s) => s.total > 0).sort((a, b) => (b.winRate ?? 0) - (a.winRate ?? 0));
-  }, [trades, fieldA, activeA, isNoneB]);
+  }, [trades, safeA, activeA, isNoneB]);
 
   const matrix = useMemo(() => {
     if (isNoneB) return { rows: [], cols: [], cells: {} };
@@ -139,7 +135,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
       cells[a] = {};
       for (const b of activeB) {
         const tds = trades.filter(
-          (t) => (t[fieldA] as string[]).includes(a) && (t[fieldB as TradeArrayField] as string[]).includes(b),
+          (t) => (t[safeA] as string[]).includes(a) && (t[safeB as TradeArrayField] as string[]).includes(b),
         );
         const w = tds.filter((t) => t.winLose.includes('win')).length;
         const l = tds.filter((t) => t.winLose.includes('lose')).length;
@@ -149,7 +145,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
       }
     }
     return { rows: activeA, cols: activeB, cells };
-  }, [trades, fieldA, fieldB, activeA, activeB, isNoneB]);
+  }, [trades, safeA, safeB, activeA, activeB, isNoneB]);
 
   const chartData = useMemo(
     () => isNoneB
@@ -214,7 +210,7 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
             )}
           </div>
           <select
-            value={fieldA}
+            value={safeA}
             onChange={(e) => { setFieldA(e.target.value as TradeArrayField); setSelA([]); }}
             className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
@@ -255,13 +251,13 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
             )}
           </div>
           <select
-            value={fieldB}
+            value={safeB}
             onChange={(e) => { setFieldB(e.target.value as TradeArrayField | 'none'); setSelB([]); }}
             className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
             style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
           >
             <option value="none">— ללא (ניתוח יחיד) —</option>
-            {fields.filter((f) => f.key !== fieldA).map((f) => (
+            {fields.filter((f) => f.key !== safeA).map((f) => (
               <option key={f.key} value={f.key}>{f.label}</option>
             ))}
           </select>
@@ -295,12 +291,12 @@ function DataExplorer({ trades, fields }: { trades: Trade[]; fields: { key: Trad
       {/* Current cross label */}
       <div className="text-xs font-medium text-center py-1"
         style={{ color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
-        מציג: <span style={{ color: '#93c5fd' }}>{labelOf(fieldA)}</span>
+        מציג: <span style={{ color: '#93c5fd' }}>{labelOf(safeA)}</span>
         {selA.length > 0 && <span style={{ color: 'var(--text-muted)' }}> [{selA.join(', ')}]</span>}
         {!isNoneB && (
           <>
             <span className="mx-2" style={{ color: 'var(--text-muted)' }}>×</span>
-            <span style={{ color: '#c4b5fd' }}>{labelOf(fieldB)}</span>
+            <span style={{ color: '#c4b5fd' }}>{labelOf(safeB)}</span>
             {selB.length > 0 && <span style={{ color: 'var(--text-muted)' }}> [{selB.join(', ')}]</span>}
           </>
         )}
