@@ -74,6 +74,7 @@ export default function WeeklyPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError]     = useState<string | null>(null);
   const [freeNotes, setFreeNotes]           = useState('');
+  const [showTrades, setShowTrades]         = useState(false);
 
   useEffect(() => {
     fetch('/api/trades', { headers: notionHeaders(getNotionConfig()) })
@@ -410,8 +411,21 @@ export default function WeeklyPage() {
               boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>פירוט עסקאות</div>
-            <div className="overflow-x-auto">
+            <button
+              onClick={() => setShowTrades((v) => !v)}
+              className="flex items-center gap-2 w-full text-left"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginBottom: showTrades ? 16 : 0 }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>פירוט עסקאות</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', marginRight: 2 }}>{periodTrades.length}</span>
+              <svg
+                width="14" height="14" viewBox="0 0 14 14" fill="none"
+                style={{ marginRight: 'auto', color: 'var(--text-muted)', transform: showTrades ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 160ms' }}
+              >
+                <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {showTrades && <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr style={{ color: 'var(--text-secondary)' }}>
@@ -453,7 +467,7 @@ export default function WeeklyPage() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </div>}
           </div>
 
           {/* AI Summary */}

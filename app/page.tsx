@@ -13,7 +13,6 @@ import {
 } from '@/lib/utils';
 import KpiCard from '@/components/ui/KpiCard';
 import PnlChart from '@/components/charts/PnlChart';
-import PieDistribution from '@/components/charts/PieDistribution';
 import { AlertTriangle } from 'lucide-react';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
@@ -47,7 +46,6 @@ export default function DashboardPage() {
   const stats = calculateStats(trades);
   const pnlCurve = getPnlCurve(trades);
   const actual = getActualTrades(trades);
-  const recentTrades = actual.filter((t) => t.date).slice(-10).reverse();
 
   const grossWins = actual.filter((t) => t.winLose.includes('win')).reduce((s, t) => s + (t.pnl ?? 0), 0);
   const grossLosses = actual.filter((t) => t.winLose.includes('lose')).reduce((s, t) => s + (t.pnl ?? 0), 0);
@@ -200,68 +198,6 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Bottom Row — always visible */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div
-          className="rounded-2xl p-5"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
-            boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Win / Loss / BE
-          </div>
-          {actual.length > 0 ? (
-            <PieDistribution wins={stats.wins} losses={stats.losses} breakevens={stats.breakevens} />
-          ) : (
-            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>0W / 0L / 0BE</span>
-            </div>
-          )}
-        </div>
-
-        <div
-          className="rounded-2xl p-5"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
-            boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            עסקאות אחרונות
-          </div>
-          {recentTrades.length > 0 ? (
-            <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
-              {recentTrades.map((t) => {
-                const isWin = t.winLose.includes('win');
-                const isLoss = t.winLose.includes('lose');
-                const color = isWin ? 'var(--green)' : isLoss ? 'var(--red)' : 'var(--text-secondary)';
-                return (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between py-1.5"
-                    style={{ borderBottom: '1px solid var(--border-color)', fontSize: 12 }}
-                  >
-                    <div className="tabular" style={{ color: 'var(--text-muted)', minWidth: 80 }}>{t.date}</div>
-                    <div style={{ color: 'var(--text-secondary)', flex: 1 }}>{t.indices[0] ?? '—'}</div>
-                    <div style={{ color, marginRight: 16 }}>{t.winLose[0] ?? '—'}</div>
-                    <div className="tabular" style={{ fontWeight: 600, color, minWidth: 60, textAlign: 'right' }}>
-                      {t.pnl !== null ? formatPnl(t.pnl) : '—'}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>אין עסקאות ב{DATE_RANGE_LABELS[range]}</span>
-            </div>
-          )}
-        </div>
-      </div>
 
     </div>
   );
