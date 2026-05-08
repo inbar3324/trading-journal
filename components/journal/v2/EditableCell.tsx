@@ -164,10 +164,10 @@ function DisplayValue({ value, onImageClick }: { value: NotionPropValue; onImage
   switch (value.type) {
     case 'title':
       return value.text
-        ? <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{value.text}</span>
+        ? <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' }}>{value.text}</span>
         : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Untitled</span>;
     case 'rich_text':
-      return <span style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>{value.text}</span>;
+      return <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' }}>{value.text}</span>;
     case 'number':
       if (value.value === null) return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>;
       return <span className="tabular" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{value.value}</span>;
