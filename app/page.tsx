@@ -197,6 +197,11 @@ interface DayData {
   totalPnl: number;
 }
 
+function getTradedEntries(entries: Trade[]): Trade[] {
+  const filtered = entries.filter(t => t.tookTrade.includes('TOOK TRADE'));
+  return filtered.length > 0 ? filtered : entries;
+}
+
 function dayColor(d: DayData): string {
   if (!d.isTrade) return 'var(--blue)';
   if (d.totalPnl > 0) return 'var(--green)';
@@ -441,7 +446,7 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
             const dayNum = parseInt(dateStr.slice(8), 10);
             const base = day ? dayColor(day) : null;
             const intensity = isSelected ? 28 : 18;
-            const tradeEntries = day?.entries.filter(t => t.tookTrade.includes('TOOK TRADE')) ?? [];
+            const tradeEntries = day ? getTradedEntries(day.entries) : [];
 
             return (
               <button
@@ -500,7 +505,7 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
             const dayNum = parseInt(dateStr.slice(8), 10);
             const base = day ? dayColor(day) : null;
             const intensity = isSelected ? 28 : 18;
-            const tradeEntries = day?.entries.filter(t => t.tookTrade.includes('TOOK TRADE')) ?? [];
+            const tradeEntries = day ? getTradedEntries(day.entries) : [];
 
             return (
               <button
@@ -569,7 +574,7 @@ function TradeTimeline({ allTrades }: { allTrades: Trade[] }) {
             </span>
           </div>
           {selectedDay.isTrade
-            ? selectedDay.entries.filter(t => t.tookTrade.includes('TOOK TRADE')).map(t => <TradeDetailCard key={t.id} trade={t} />)
+            ? getTradedEntries(selectedDay.entries).map(t => <TradeDetailCard key={t.id} trade={t} />)
             : <NoTradeDayPanel entries={selectedDay.entries} />
           }
         </div>

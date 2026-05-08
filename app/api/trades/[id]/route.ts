@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
-import { parseTrade, extractFilePropNames, updateTrade, archiveTrade } from '@/lib/notion';
+import { parseTrade, extractFilePropNames, updateTrade, archiveTrade, buildFieldMap } from '@/lib/notion';
 
 export async function GET(
   req: NextRequest,
@@ -13,7 +13,8 @@ export async function GET(
     const notion = new Client({ auth: key, timeoutMs: 8000 });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const page = await (notion.pages as any).retrieve({ page_id: id }) as Record<string, unknown>;
-    const trade = parseTrade(page);
+    const fm = buildFieldMap((page.properties ?? {}) as Record<string, { type: string }>);
+    const trade = parseTrade(page, fm);
     const filePropNames = extractFilePropNames(page);
     return NextResponse.json({ trade, filePropNames });
   } catch (e) {
