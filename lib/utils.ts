@@ -106,13 +106,14 @@ export function toISODate(date: Date): string {
 
 // ── Date range filtering ──────────────────────────────────────────────────────
 
-export type DateRange = 'today' | 'this_week' | 'last_week' | 'this_month' | '3_months' | 'this_year' | 'all';
+export type DateRange = 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | '3_months' | 'this_year' | 'all';
 
 export const DATE_RANGE_LABELS: Record<DateRange, string> = {
   today: 'היום',
   this_week: 'השבוע',
   last_week: 'שבוע שעבר',
   this_month: 'החודש',
+  last_month: 'חודש שעבר',
   '3_months': '3 חודשים',
   this_year: 'השנה',
   all: 'הכל',
@@ -148,6 +149,14 @@ export function filterByDateRange(trades: Trade[], range: DateRange): Trade[] {
     case 'this_month': {
       const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
       return trades.filter((t) => t.date && t.date >= start && t.date <= today);
+    }
+
+    case 'last_month': {
+      const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const start = toISODate(firstOfLastMonth);
+      const end = toISODate(new Date(firstOfThisMonth.getTime() - 86400000));
+      return trades.filter((t) => t.date && t.date >= start && t.date <= end);
     }
 
     case '3_months': {

@@ -16,7 +16,7 @@ import PnlChart from '@/components/charts/PnlChart';
 import { AlertTriangle } from 'lucide-react';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 
-const RANGES: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
+const RANGES: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', 'last_month', '3_months', 'this_year', 'all'];
 
 export default function DashboardPage() {
   const [allTrades, setAllTrades] = useState<Trade[]>([]);
@@ -178,24 +178,7 @@ export default function DashboardPage() {
           <TradeTimeline allTrades={allTrades} />
         </>
       ) : (
-        <>
-          <TradeTimeline allTrades={allTrades} />
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.025)',
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 12 }}>
-              Cumulative PNL
-            </div>
-            <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>אין עסקאות ב{DATE_RANGE_LABELS[range]}</span>
-            </div>
-          </div>
-        </>
+        <TradeTimeline allTrades={allTrades} />
       )}
 
 
