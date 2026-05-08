@@ -1,7 +1,9 @@
 import type { Trade, GroupStat, PnlPoint, DashboardStats } from './types';
 
 export function getActualTrades(trades: Trade[]): Trade[] {
-  return trades.filter((t) => t.tookTrade.includes('TOOK TRADE'));
+  const filtered = trades.filter((t) => t.tookTrade.includes('TOOK TRADE'));
+  // If the client's DB has no 'tookTrade' field (or uses different values), return all trades
+  return filtered.length > 0 ? filtered : trades;
 }
 
 export function calculateStats(trades: Trade[]): DashboardStats {
@@ -287,7 +289,7 @@ export function getCorrelationMatrix(
 export function generateStatsSummary(trades: Trade[], weekStart: string, weekEnd: string): string {
   const wins   = trades.filter((t) => t.winLose.includes('win'));
   const losses = trades.filter((t) => t.winLose.includes('lose'));
-  const bes    = trades.filter((t) => t.winLose.includes('be') || t.winLose.includes('BE'));
+  const bes    = trades.filter((t) => t.winLose.includes('BRAKEVEN'));
   const totalPnl = trades.reduce((s, t) => s + (t.pnl ?? 0), 0);
   const denom  = wins.length + losses.length;
   const winRate = denom > 0 ? Math.round((wins.length / denom) * 100) : 0;

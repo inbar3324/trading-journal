@@ -84,3 +84,27 @@ export interface FieldOption {
 }
 
 export type NotionSchema = Record<string, FieldOption[]>;
+
+export interface FieldMap {
+  notes: string;
+  date: string;
+  pnl: string;
+  winLose: string;
+  day: string;
+  time: string;
+  tookTrade: string;
+  indices: string;
+  direction: string;
+  news: string;
+  reversalContinuation: string;
+  drawInLiquidity: string;
+  poi: string;
+  lowerTimeEntry: string;
+  rulesFeelings: string;
+  trend: string;
+  biasForDay: string;
+  rateTrade: string;
+  tradeIdeaLink: string;
+  oneMLink: string;
+  linkAfter: string;
+}

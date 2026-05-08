@@ -1,11 +1,98 @@
 import { Client } from '@notionhq/client';
-import type { Trade, TradeInput, NotionSchema } from './types';
+import type { Trade, TradeInput, NotionSchema, FieldMap } from './types';
 
 const NOTION_VERSION = '2025-09-03';
+
+const DEFAULT_FIELD_MAP: FieldMap = {
+  notes: 'NOTES!',
+  date: 'Date',
+  pnl: 'PNL',
+  winLose: 'win/lose',
+  day: 'day',
+  time: 'TIME',
+  tookTrade: 'Took a trade today?',
+  indices: 'indices',
+  direction: 'long/short',
+  news: 'NEWS',
+  reversalContinuation: 'reversal/continuation ',
+  drawInLiquidity: 'draw in liquidity',
+  poi: 'POI',
+  lowerTimeEntry: 'LOWER TIME ENTRY',
+  rulesFeelings: 'RULES/feeling',
+  trend: 'TREND',
+  biasForDay: 'BIAS FOR THE DAY',
+  rateTrade: 'RATE TRADE',
+  tradeIdeaLink: 'TRADE  IDEA LINK',
+  oneMLink: '1M trade link',
+  linkAfter: 'link to what happend after',
+};
+
+function normalizeWinLose(v: string): string {
+  const l = v.toLowerCase().trim();
+  if (['win', 'w', 'profit', '✅', 'yes', 't', 'winner', 'won'].includes(l)) return 'win';
+  if (['lose', 'l', 'loss', '❌', 'no', 'f', 'loser', 'lost'].includes(l)) return 'lose';
+  if (['brakeven', 'breakeven', 'be', 'b/e', 'break even', 'break-even', 'neutral', 'scratch', 'even'].includes(l)) return 'BRAKEVEN';
+  return v;
+}
+
+function normalizeTookTrade(v: string): string {
+  const l = v.toLowerCase().trim();
+  if (['took trade', 'yes', 'y', 'true', 'traded', 'active', '1', '✅', 'done'].includes(l)) return 'TOOK TRADE';
+  return v;
+}
+
+function findProp(
+  props: Record<string, { type: string }>,
+  types: string | string[],
+  hints: string[] = [],
+): string | undefined {
+  const typeArr = Array.isArray(types) ? types : [types];
+  const candidates = Object.entries(props).filter(([, p]) => typeArr.includes(p.type));
+  if (candidates.length === 0) return undefined;
+  for (const hint of hints) {
+    const exact = candidates.find(([n]) => n.toLowerCase() === hint.toLowerCase());
+    if (exact) return exact[0];
+  }
+  for (const hint of hints) {
+    const partial = candidates.find(([n]) => n.toLowerCase().includes(hint.toLowerCase()));
+    if (partial) return partial[0];
+  }
+  return candidates[0][0];
+}
+
+export function buildFieldMap(props: Record<string, { type: string }>): FieldMap {
+  return {
+    notes: findProp(props, 'title') ?? DEFAULT_FIELD_MAP.notes,
+    date: findProp(props, 'date', ['date', 'trade date', 'entry date']) ?? DEFAULT_FIELD_MAP.date,
+    pnl: findProp(props, 'number', ['pnl', 'p&l', 'profit', 'p/l', 'profit/loss', 'gain', 'return']) ?? DEFAULT_FIELD_MAP.pnl,
+    winLose: findProp(props, ['select', 'multi_select'], ['win/lose', 'result', 'outcome', 'w/l', 'trade result', 'win lose']) ?? DEFAULT_FIELD_MAP.winLose,
+    day: findProp(props, 'multi_select', ['day', 'weekday', 'day of week']) ?? DEFAULT_FIELD_MAP.day,
+    time: findProp(props, ['rich_text', 'text'], ['time', 'entry time', 'trade time']) ?? DEFAULT_FIELD_MAP.time,
+    tookTrade: findProp(props, 'multi_select', ['took a trade', 'took trade', 'traded', 'active']) ?? DEFAULT_FIELD_MAP.tookTrade,
+    indices: findProp(props, 'multi_select', ['indices', 'index', 'market', 'instrument', 'symbol', 'ticker', 'asset']) ?? DEFAULT_FIELD_MAP.indices,
+    direction: findProp(props, 'multi_select', ['long/short', 'direction', 'side', 'long short', 'type']) ?? DEFAULT_FIELD_MAP.direction,
+    news: findProp(props, 'multi_select', ['news', 'catalyst', 'event', 'macro']) ?? DEFAULT_FIELD_MAP.news,
+    reversalContinuation: findProp(props, 'multi_select', ['reversal/continuation', 'reversal', 'continuation', 'trade type']) ?? DEFAULT_FIELD_MAP.reversalContinuation,
+    drawInLiquidity: findProp(props, 'multi_select', ['draw in liquidity', 'draw', 'liquidity']) ?? DEFAULT_FIELD_MAP.drawInLiquidity,
+    poi: findProp(props, 'multi_select', ['poi', 'point of interest', 'entry zone', 'zone', 'level']) ?? DEFAULT_FIELD_MAP.poi,
+    lowerTimeEntry: findProp(props, 'multi_select', ['lower time entry', 'lte', 'lower tf entry']) ?? DEFAULT_FIELD_MAP.lowerTimeEntry,
+    rulesFeelings: findProp(props, 'multi_select', ['rules/feeling', 'rules', 'feeling', 'emotion', 'psychology', 'mental']) ?? DEFAULT_FIELD_MAP.rulesFeelings,
+    trend: findProp(props, 'multi_select', ['trend', 'market trend', 'higher tf', 'htf trend']) ?? DEFAULT_FIELD_MAP.trend,
+    biasForDay: findProp(props, 'multi_select', ['bias for the day', 'bias', 'daily bias', 'day bias']) ?? DEFAULT_FIELD_MAP.biasForDay,
+    rateTrade: findProp(props, 'multi_select', ['rate trade', 'rating', 'grade', 'quality', 'score']) ?? DEFAULT_FIELD_MAP.rateTrade,
+    tradeIdeaLink: findProp(props, 'url', ['trade idea link', 'trade idea', 'chart link', 'tradingview']) ?? DEFAULT_FIELD_MAP.tradeIdeaLink,
+    oneMLink: findProp(props, 'url', ['1m trade link', '1m link', '1 minute', 'entry link']) ?? DEFAULT_FIELD_MAP.oneMLink,
+    linkAfter: findProp(props, 'url', ['link to what happened after', 'what happened', 'after link', 'result link']) ?? DEFAULT_FIELD_MAP.linkAfter,
+  };
+}
 
 function multiSelect(prop: unknown): string[] {
   if (!prop || typeof prop !== 'object') return [];
   const p = prop as Record<string, unknown>;
+  if (p.type === 'select') {
+    const item = p.select as { name: string } | null;
+    return item ? [item.name] : [];
+  }
   if (p.type !== 'multi_select') return [];
   const items = p.multi_select as Array<{ name: string }>;
   return Array.isArray(items) ? items.map((o) => o.name) : [];
@@ -39,14 +126,14 @@ export function extractFilePropNames(page: Record<string, unknown>): string[] {
     .map(([key]) => key);
 }
 
-export function parseTrade(page: Record<string, unknown>): Trade {
+export function parseTrade(page: Record<string, unknown>, fieldMap: FieldMap = DEFAULT_FIELD_MAP): Trade {
   const p = page.properties as Record<string, unknown>;
-  const dateField = p['Date'] as Record<string, unknown> | undefined;
+  const dateField = p[fieldMap.date] as Record<string, unknown> | undefined;
   const dateObj = dateField?.date as Record<string, unknown> | undefined;
-  const pnlField = p['PNL'] as Record<string, unknown> | undefined;
-  const tradeIdeaLink = p['TRADE  IDEA LINK'] as Record<string, unknown> | undefined;
-  const oneMLink = p['1M trade link'] as Record<string, unknown> | undefined;
-  const linkAfter = p['link to what happend after'] as Record<string, unknown> | undefined;
+  const pnlField = p[fieldMap.pnl] as Record<string, unknown> | undefined;
+  const tradeIdeaLink = p[fieldMap.tradeIdeaLink] as Record<string, unknown> | undefined;
+  const oneMLink = p[fieldMap.oneMLink] as Record<string, unknown> | undefined;
+  const linkAfter = p[fieldMap.linkAfter] as Record<string, unknown> | undefined;
 
   const cover = page.cover as Record<string, unknown> | undefined;
   const coverUrl = ((cover?.external as Record<string, unknown>)?.url as string)
@@ -64,23 +151,23 @@ export function parseTrade(page: Record<string, unknown>): Trade {
     id: page.id as string,
     url: page.url as string,
     date: (dateObj?.start as string) ?? null,
-    day: multiSelect(p['day']),
-    time: richTextContent(p['TIME']),
-    tookTrade: multiSelect(p['Took a trade today?']),
-    indices: multiSelect(p['indices']),
-    longShort: multiSelect(p['long/short']),
-    news: multiSelect(p['NEWS']),
-    reversalContinuation: multiSelect(p['reversal/continuation ']),
-    drawInLiquidity: multiSelect(p['draw in liquidity']),
-    poi: multiSelect(p['POI']),
-    lowerTimeEntry: multiSelect(p['LOWER TIME ENTRY']),
-    rulesFeelings: multiSelect(p['RULES/feeling']),
-    trend: multiSelect(p['TREND']),
-    biasForTheDay: multiSelect(p['BIAS FOR THE DAY']),
-    rateTrade: multiSelect(p['RATE TRADE']),
-    winLose: multiSelect(p['win/lose']),
+    day: multiSelect(p[fieldMap.day]),
+    time: richTextContent(p[fieldMap.time]),
+    tookTrade: multiSelect(p[fieldMap.tookTrade]).map(normalizeTookTrade),
+    indices: multiSelect(p[fieldMap.indices]),
+    longShort: multiSelect(p[fieldMap.direction]),
+    news: multiSelect(p[fieldMap.news]),
+    reversalContinuation: multiSelect(p[fieldMap.reversalContinuation]),
+    drawInLiquidity: multiSelect(p[fieldMap.drawInLiquidity]),
+    poi: multiSelect(p[fieldMap.poi]),
+    lowerTimeEntry: multiSelect(p[fieldMap.lowerTimeEntry]),
+    rulesFeelings: multiSelect(p[fieldMap.rulesFeelings]),
+    trend: multiSelect(p[fieldMap.trend]),
+    biasForTheDay: multiSelect(p[fieldMap.biasForDay]),
+    rateTrade: multiSelect(p[fieldMap.rateTrade]),
+    winLose: multiSelect(p[fieldMap.winLose]).map(normalizeWinLose),
     pnl: (pnlField?.number as number) ?? null,
-    notes: richTextContent(p['NOTES!']),
+    notes: richTextContent(p[fieldMap.notes]),
     tradeIdeaLink: (tradeIdeaLink?.url as string) ?? null,
     oneMTradeLink: (oneMLink?.url as string) ?? null,
     linkToWhatHappenedAfter: (linkAfter?.url as string) ?? null,
@@ -359,6 +446,7 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
   const tradeMap = new Map<string, Trade>();
   let cursor: string | undefined;
   let firstPage: Record<string, unknown> | undefined;
+  let fieldMap: FieldMap | undefined;
 
   // Primary read: dataSources connector (handles connector IDs)
   try {
@@ -368,13 +456,14 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
         data_source_id: dataSourceId,
         start_cursor: cursor,
         page_size: 100,
-        sorts: [{ property: 'Date', direction: 'ascending' }],
+        sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
       });
       const results: unknown[] = res.results ?? [];
       for (const page of results) {
         const p = page as Record<string, unknown>;
         if (p.properties) {
-          const trade = parseTrade(p);
+          if (!fieldMap) fieldMap = buildFieldMap(p.properties as Record<string, { type: string }>);
+          const trade = parseTrade(p, fieldMap);
           tradeMap.set(trade.id, trade);
           if (!firstPage) firstPage = p;
         }
@@ -392,7 +481,7 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
       do {
         const body: Record<string, unknown> = {
           page_size: 100,
-          sorts: [{ property: 'Date', direction: 'ascending' }],
+          sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
         };
         if (dbCursor) body.start_cursor = dbCursor;
         const res = await fetch(`https://api.notion.com/v1/databases/${dataSourceId}/query`, {
@@ -404,7 +493,8 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
         const data = await res.json() as Record<string, unknown>;
         const results = (data.results as Array<Record<string, unknown>>) ?? [];
         for (const page of results) {
-          const trade = parseTrade(page);
+          if (!fieldMap && page.properties) fieldMap = buildFieldMap(page.properties as Record<string, { type: string }>);
+          const trade = parseTrade(page, fieldMap ?? DEFAULT_FIELD_MAP);
           tradeMap.set(trade.id, trade);
           if (!firstPage) firstPage = page;
         }
