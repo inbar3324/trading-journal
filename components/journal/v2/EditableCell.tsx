@@ -312,7 +312,7 @@ function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile
   if (prop.type === 'title') {
     const init = value.type === 'title' ? value.text : '';
     return (
-      <TextInput
+      <TextareaInput
         autoFocus={autoFocus}
         initial={init}
         style={{ ...inputBase, fontWeight: 500 }}
@@ -324,7 +324,7 @@ function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile
   if (prop.type === 'rich_text') {
     const init = value.type === 'rich_text' ? value.text : '';
     return (
-      <TextInput
+      <TextareaInput
         autoFocus={autoFocus}
         initial={init}
         style={inputBase}
@@ -397,6 +397,42 @@ function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile
 
   // Anything else falls back to display.
   return <DisplayValue value={value} />;
+}
+
+function TextareaInput({
+  initial, autoFocus, style, onCommit, onCancel,
+}: {
+  initial: string;
+  autoFocus: boolean;
+  style: React.CSSProperties;
+  onCommit: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const [val, setVal] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.style.height = 'auto';
+      ref.current.style.height = ref.current.scrollHeight + 'px';
+    }
+  }, [val]);
+
+  return (
+    <textarea
+      ref={ref}
+      autoFocus={autoFocus}
+      value={val}
+      rows={1}
+      onChange={e => setVal(e.target.value)}
+      onClick={e => e.stopPropagation()}
+      onBlur={() => onCommit(val)}
+      onKeyDown={e => {
+        if (e.key === 'Escape') onCancel();
+      }}
+      style={{ ...style, resize: 'none', overflow: 'hidden', lineHeight: '1.5', display: 'block' }}
+    />
+  );
 }
 
 function TextInput({
