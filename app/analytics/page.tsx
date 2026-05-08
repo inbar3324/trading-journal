@@ -583,6 +583,8 @@ export default function AnalyticsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const actual = useMemo(() => getActualTrades(allTrades), [allTrades]);
+
   const fields = useMemo(() =>
     BASE_fields
       .map(f => ({
@@ -591,8 +593,6 @@ export default function AnalyticsPage() {
       }))
       .filter(f => uniqueValues(actual, f.key as TradeArrayField).length > 0),
   [fieldMap, actual]);
-
-  const actual = useMemo(() => getActualTrades(allTrades), [allTrades]);
 
   // Time analysis
   const timeAnalysis = useMemo(() => {
