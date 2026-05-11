@@ -387,7 +387,7 @@ export default function WeeklySummaryPage() {
     const id = uid('row');
     const cells: Record<string, NotionPropValue> = {};
     for (const col of cur.columns) cells[col.id] = defaultCell(col.type);
-    upd(s => ({ ...s, rows: [...s.rows, { id, cells }] }));
+    upd(s => ({ ...s, rows: [{ id, cells }, ...s.rows] }));
     if (cur.notion) {
       enqueue(async () => {
         const latest = storeRef.current;
@@ -533,8 +533,8 @@ export default function WeeklySummaryPage() {
       upd(s => ({
         ...s,
         notion: { dbId: data.dbId!, dbUrl: data.url ?? '' },
-        columns: s.columns.map(c => ({ ...c, notionPropId: data.columnPropIds?.[c.id] ?? c.notionPropId })),
-        rows: s.rows.map(r => ({ ...r, notionPageId: data.rowPageIds?.[r.id] ?? r.notionPageId })),
+        columns: [],
+        rows: [],
       }));
       setExportResult(data.url ?? null);
       setExportStatus('done');
