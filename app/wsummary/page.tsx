@@ -251,6 +251,7 @@ export default function WeeklySummaryPage() {
         // Preserve local row order — update cells from Notion, keep positions stable.
         for (const r of prev.rows) {
           if (!r.notionPageId) { newRows.push(r); continue; }
+          if (seenPageIds.has(r.notionPageId)) continue; // skip duplicates
           const np = notionPageById.get(r.notionPageId);
           if (!np) continue; // deleted in Notion
           const cells: Record<string, NotionPropValue> = {};
