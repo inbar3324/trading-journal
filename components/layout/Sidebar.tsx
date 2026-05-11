@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, CalendarDays, TrendingUp, BookOpen } from 'lucide-react';
+import { LayoutDashboard, BarChart2, CalendarDays, TrendingUp, BookOpen, Table2 } from 'lucide-react';
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/journal', icon: BookOpen, label: 'Journal' },
   { href: '/analytics', icon: BarChart2, label: 'Analytics' },
   { href: '/weekly', icon: CalendarDays, label: 'Recap' },
+  { href: '/wsummary', icon: Table2, label: 'W. Summary' },
 ];
 
 export default function Sidebar() {
