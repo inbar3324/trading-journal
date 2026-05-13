@@ -24,15 +24,16 @@ export async function GET(
       );
     }
     const dsRaw = await dsRes.json() as Record<string, unknown>;
-    const { schema, viewSorts } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
+    const { schema, orderFromView } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
 
     const pages: ReturnType<typeof parsePage>[] = [];
     let cursor: string | undefined;
     do {
-      const sorts = viewSorts.length > 0
-        ? viewSorts
-        : [{ timestamp: 'created_time', direction: 'ascending' }];
-      const body: Record<string, unknown> = { page_size: 100, sorts };
+      // Always request ascending by created_time; post-sort below handles any API non-compliance.
+      const body: Record<string, unknown> = {
+        page_size: 100,
+        sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
+      };
       if (cursor) body.start_cursor = cursor;
       const qRes = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
         method: 'POST',
@@ -48,8 +49,18 @@ export async function GET(
       cursor = data.next_cursor ?? undefined;
     } while (cursor);
 
-    pages.sort((a, b) => a.createdTime.localeCompare(b.createdTime));
-    return NextResponse.json({ schema, pages });
+    // Notion's data_sources query returns newest-first regardless of `sorts`, and rows created in
+    // the same second share identical `created_time`. Sort ascending; tiebreak by reverse API index
+    // so equal-time rows flip from newest-first (API) to oldest-first (Notion view order).
+    const indexed = pages.map((p, i) => ({ p, i }));
+    indexed.sort((a, b) => {
+      const at = a.p.createdTime || '9999';
+      const bt = b.p.createdTime || '9999';
+      if (at !== bt) return at < bt ? -1 : 1;
+      return b.i - a.i;
+    });
+    const sortedPages = indexed.map(x => x.p);
+    return NextResponse.json({ schema, pages: sortedPages, orderFromView });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
   }

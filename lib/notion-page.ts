@@ -410,7 +410,7 @@ export async function applyViewOrder(
   schema: NotionDbSchema,
   dataSourceId: string,
   key: string,
-): Promise<{ schema: NotionDbSchema; viewSorts: Array<Record<string, unknown>> }> {
+): Promise<{ schema: NotionDbSchema; viewSorts: Array<Record<string, unknown>>; orderFromView: boolean }> {
   let viewSorts: Array<Record<string, unknown>> = [];
   try {
     const headers = makeHeaders(key);
@@ -431,43 +431,43 @@ export async function applyViewOrder(
         const cfg = view.configuration as Record<string, unknown> | undefined;
         const rawSorts = (cfg?.sorts as Array<Record<string, unknown>>) ?? [];
 
-        // Ensure new rows always appear at bottom: force created_time ascending.
-        const hasAscCreated = rawSorts.some(
-          s => s.timestamp === 'created_time' && s.direction === 'ascending',
-        );
-        if (!hasAscCreated) {
-          viewSorts = [{ timestamp: 'created_time', direction: 'ascending' }];
-          fetch(`https://api.notion.com/v1/views/${viewId}`, {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify({
-              configuration: { sorts: viewSorts },
-            }),
-          }).catch(() => {});
-        } else {
-          viewSorts = rawSorts;
-        }
+        // Map view sorts to Notion query API format (property_id → property name).
+        const propByIdMap = new Map(schema.properties.map(p => [p.id, p.name]));
+        viewSorts = rawSorts.map(s => {
+          if (s.timestamp) return s;
+          const propId = s.property_id as string | undefined;
+          if (propId) {
+            const propName = propByIdMap.get(propId);
+            if (propName) return { property: propName, direction: s.direction };
+          }
+          return null;
+        }).filter((s): s is Record<string, unknown> => s !== null);
 
         const viewProps = (cfg?.properties as Array<Record<string, unknown>>) ?? [];
         if (viewProps.length > 0) {
           const propById = new Map(schema.properties.map(p => [p.id, p]));
+          // Also build lookup by URL-encoded ID and by name as fallbacks.
+          const propByEncId = new Map(schema.properties.map(p => [encodeURIComponent(p.id), p]));
+          const propByName = new Map(schema.properties.map(p => [p.name, p]));
           const ordered: NotionPropDef[] = [];
           const seen = new Set<string>();
           for (const vp of viewProps) {
             const pid = vp.property_id as string;
-            const prop = propById.get(pid);
+            const decodedPid = pid && pid.includes('%') ? decodeURIComponent(pid) : pid;
+            const prop = propById.get(decodedPid) ?? propById.get(pid)
+              ?? propByEncId.get(pid) ?? propByName.get(pid as string);
             if (prop) { ordered.push(prop); seen.add(prop.id); }
           }
           for (const p of schema.properties) {
             if (!seen.has(p.id)) ordered.push(p);
           }
-          return { schema: { ...schema, properties: ordered }, viewSorts };
+          return { schema: { ...schema, properties: ordered }, viewSorts, orderFromView: true };
         }
-        return { schema, viewSorts };
+        return { schema, viewSorts, orderFromView: false };
       } catch { /* try next view */ }
     }
   } catch { /* keep schema as-is */ }
-  return { schema, viewSorts };
+  return { schema, viewSorts, orderFromView: false };
 }
 
 export async function getAllPages(creds?: { key?: string; dbId?: string }): Promise<{

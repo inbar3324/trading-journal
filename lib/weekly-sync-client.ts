@@ -6,6 +6,7 @@ import { getNotionConfig, notionHeaders as buildHeaders } from './notion-config'
 
 interface NotionPageRaw {
   id: string;
+  createdTime: string;
   properties: Record<string, NotionPropValue>;
 }
 
@@ -15,6 +16,7 @@ interface PullResponse {
     properties: NotionPropDef[];
   };
   pages: NotionPageRaw[];
+  orderFromView?: boolean;
 }
 
 function headers(): Record<string, string> {

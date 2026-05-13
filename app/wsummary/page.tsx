@@ -222,29 +222,42 @@ export default function WeeklySummaryPage() {
     if (!cur?.notion) return;
     if (pendingRef.current > 0) return; // skip pull while pushing
     try {
-      const { schema, pages: nPages } = await pullDb(cur.notion.dbId);
+      const { schema, pages: nPages, orderFromView } = await pullDb(cur.notion.dbId);
       setStore(prev => {
         if (!prev?.notion) return prev;
         const localByPropId = new Map(
           prev.columns.filter(c => c.notionPropId).map(c => [c.notionPropId!, c] as const),
         );
-        // Order: Notion title first (writes assume index 0 is the title prop),
-        // then the rest of Notion's props, then any local-only columns.
-        const titleIdx = schema.properties.findIndex(p => p.type === 'title');
-        const ordered = titleIdx > 0
-          ? [schema.properties[titleIdx], ...schema.properties.filter((_, i) => i !== titleIdx)]
-          : schema.properties;
+
+        // Determine column order:
+        //  - If view has explicit `properties` config in Notion, trust server order.
+        //  - Otherwise, sort non-title by name (Notion's data_sources API returns properties
+        //    alphabetically by random ID, which doesn't match Notion's UI order. Sorting by
+        //    name produces a stable, deterministic order — matches Notion for "Column N"
+        //    naming and Hebrew alphabetical, and is always identical across pulls).
+        let ordered: NotionPropDef[];
+        if (orderFromView) {
+          const titleIdx = schema.properties.findIndex(p => p.type === 'title');
+          ordered = titleIdx > 0
+            ? [schema.properties[titleIdx], ...schema.properties.filter((_, i) => i !== titleIdx)]
+            : schema.properties;
+        } else {
+          ordered = [...schema.properties].sort((a, b) => {
+            if (a.type === 'title') return -1;
+            if (b.type === 'title') return 1;
+            return a.name.localeCompare(b.name);
+          });
+        }
+
         const synced: WColumn[] = [];
         for (const np of ordered) {
           const wType = notionTypeToWColType(np.type);
           if (!wType) continue;
           const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
           const local = localByPropId.get(np.id);
-          if (local) {
-            synced.push({ ...local, notionType: np.type, name: np.name, type: wType, options: opts });
-          } else {
-            synced.push({ id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
-          }
+          synced.push(local
+            ? { ...local, notionType: np.type, name: np.name, type: wType, options: opts }
+            : { id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
         }
         for (const c of prev.columns) if (!c.notionPropId) synced.push(c);
 
