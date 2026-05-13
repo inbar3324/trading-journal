@@ -149,6 +149,8 @@ export default function WeeklySummaryPage() {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [dragRowId, setDragRowId] = useState<string | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
+  const [dragColId, setDragColId] = useState<string | null>(null);
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
   const [exportModal, setExportModal] = useState(false);
   const [exportStatus, setExportStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [exportResult, setExportResult] = useState<string | null>(null);
@@ -229,37 +231,60 @@ export default function WeeklySummaryPage() {
           prev.columns.filter(c => c.notionPropId).map(c => [c.notionPropId!, c] as const),
         );
 
-        // Determine column order:
-        //  - If view has explicit `properties` config in Notion, trust server order.
-        //  - Otherwise, sort non-title by name (Notion's data_sources API returns properties
-        //    alphabetically by random ID, which doesn't match Notion's UI order. Sorting by
-        //    name produces a stable, deterministic order — matches Notion for "Column N"
-        //    naming and Hebrew alphabetical, and is always identical across pulls).
-        let ordered: NotionPropDef[];
-        if (orderFromView) {
-          const titleIdx = schema.properties.findIndex(p => p.type === 'title');
-          ordered = titleIdx > 0
-            ? [schema.properties[titleIdx], ...schema.properties.filter((_, i) => i !== titleIdx)]
-            : schema.properties;
-        } else {
-          ordered = [...schema.properties].sort((a, b) => {
-            if (a.type === 'title') return -1;
-            if (b.type === 'title') return 1;
-            return a.name.localeCompare(b.name);
-          });
-        }
-
+        // Column order:
+        //  - If we already have local synced columns, preserve local order (supports user
+        //    drag-to-reorder). New Notion props get appended at the end.
+        //  - On first pull (no local synced cols), use Notion's view order or alphabetical.
         const synced: WColumn[] = [];
-        for (const np of ordered) {
-          const wType = notionTypeToWColType(np.type);
-          if (!wType) continue;
-          const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
-          const local = localByPropId.get(np.id);
-          synced.push(local
-            ? { ...local, notionType: np.type, name: np.name, type: wType, options: opts }
-            : { id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
+        const seenPropIds = new Set<string>();
+        const hasLocalSynced = prev.columns.some(c => c.notionPropId);
+
+        if (hasLocalSynced) {
+          for (const local of prev.columns) {
+            if (local.notionPropId) {
+              const np = schema.properties.find(p => p.id === local.notionPropId);
+              if (!np) continue; // column was deleted in Notion
+              const wType = notionTypeToWColType(np.type);
+              if (!wType) continue;
+              const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
+              synced.push({ ...local, notionType: np.type, name: np.name, type: wType, options: opts });
+              seenPropIds.add(np.id);
+            } else {
+              synced.push(local);
+            }
+          }
+          for (const np of schema.properties) {
+            if (seenPropIds.has(np.id)) continue;
+            const wType = notionTypeToWColType(np.type);
+            if (!wType) continue;
+            const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
+            synced.push({ id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
+          }
+        } else {
+          let ordered: NotionPropDef[];
+          if (orderFromView) {
+            const titleIdx = schema.properties.findIndex(p => p.type === 'title');
+            ordered = titleIdx > 0
+              ? [schema.properties[titleIdx], ...schema.properties.filter((_, i) => i !== titleIdx)]
+              : schema.properties;
+          } else {
+            ordered = [...schema.properties].sort((a, b) => {
+              if (a.type === 'title') return -1;
+              if (b.type === 'title') return 1;
+              return a.name.localeCompare(b.name);
+            });
+          }
+          for (const np of ordered) {
+            const wType = notionTypeToWColType(np.type);
+            if (!wType) continue;
+            const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
+            const local = localByPropId.get(np.id);
+            synced.push(local
+              ? { ...local, notionType: np.type, name: np.name, type: wType, options: opts }
+              : { id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
+          }
+          for (const c of prev.columns) if (!c.notionPropId) synced.push(c);
         }
-        for (const c of prev.columns) if (!c.notionPropId) synced.push(c);
 
         // Follow Notion's row order (created_time ascending from query).
         const localByPageId = new Map(
@@ -407,6 +432,18 @@ export default function WeeklySummaryPage() {
         }));
       });
     }
+  }
+
+  function reorderColumns(fromId: string, toId: string) {
+    upd(s => {
+      const cols = [...s.columns];
+      const from = cols.findIndex(c => c.id === fromId);
+      const to = cols.findIndex(c => c.id === toId);
+      if (from === -1 || to === -1 || from === to) return s;
+      const [item] = cols.splice(from, 1);
+      cols.splice(to, 0, item);
+      return { ...s, columns: cols };
+    });
   }
 
   function reorderRows(fromId: string, toId: string) {
@@ -709,11 +746,41 @@ export default function WeeklySummaryPage() {
               {cols.map(col => (
                 <th
                   key={col.id}
+                  draggable
+                  onDragStart={e => {
+                    const t = e.target as HTMLElement;
+                    if (t.tagName === 'INPUT' || t.tagName === 'BUTTON' || t.closest('button')) {
+                      e.preventDefault();
+                      return;
+                    }
+                    e.dataTransfer.effectAllowed = 'move';
+                    setDragColId(col.id);
+                  }}
+                  onDragEnd={() => { setDragColId(null); setDragOverColId(null); }}
+                  onDragOver={e => {
+                    if (!dragColId || dragColId === col.id) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    setDragOverColId(col.id);
+                  }}
+                  onDragLeave={() => { if (dragOverColId === col.id) setDragOverColId(null); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    if (dragColId && dragColId !== col.id) reorderColumns(dragColId, col.id);
+                    setDragOverColId(null);
+                  }}
                   style={{
                     width: colWidth(toPropDef(col).type),
                     minWidth: colWidth(toPropDef(col).type),
                     padding: '8px 0', textAlign: 'left',
-                    borderRight: '1px solid var(--border-color)', fontWeight: 400,
+                    borderRight: dragOverColId === col.id
+                      ? '2px solid var(--blue)'
+                      : '1px solid var(--border-color)',
+                    fontWeight: 400,
+                    cursor: dragColId ? 'grabbing' : 'grab',
+                    opacity: dragColId === col.id ? 0.4 : 1,
+                    background: dragOverColId === col.id ? 'rgba(59,130,246,0.07)' : undefined,
+                    transition: 'background 80ms, opacity 80ms',
                   }}
                 >
                   <ColumnHeader
