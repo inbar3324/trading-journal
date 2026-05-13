@@ -147,6 +147,8 @@ function ColumnHeader({
 export default function WeeklySummaryPage() {
   const [store, setStore] = useState<WStore | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+  const [dragRowId, setDragRowId] = useState<string | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
   const [exportModal, setExportModal] = useState(false);
   const [exportStatus, setExportStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [exportResult, setExportResult] = useState<string | null>(null);
@@ -168,6 +170,7 @@ export default function WeeklySummaryPage() {
   const storeRef = useRef<WStore | null>(null);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   const pendingRef = useRef(0);
+  const addRowBtnRef = useRef<HTMLTableRowElement>(null);
 
   useEffect(() => { storeRef.current = store; }, [store]);
 
@@ -245,33 +248,22 @@ export default function WeeklySummaryPage() {
         }
         for (const c of prev.columns) if (!c.notionPropId) synced.push(c);
 
-        const notionPageById = new Map(nPages.map(np => [np.id, np] as const));
-        const seenPageIds = new Set<string>();
+        // Follow Notion's row order (created_time ascending from query).
+        const localByPageId = new Map(
+          prev.rows.filter(r => r.notionPageId).map(r => [r.notionPageId!, r] as const),
+        );
         const newRows: WRow[] = [];
-        // Preserve local row order — update cells from Notion, keep positions stable.
-        for (const r of prev.rows) {
-          if (!r.notionPageId) { newRows.push(r); continue; }
-          if (seenPageIds.has(r.notionPageId)) continue; // skip duplicates
-          const np = notionPageById.get(r.notionPageId);
-          if (!np) continue; // deleted in Notion
-          const cells: Record<string, NotionPropValue> = {};
-          for (const col of synced) {
-            const v = (np.properties as Record<string, NotionPropValue>)[col.name];
-            cells[col.id] = v ?? defaultCell(col.type);
-          }
-          newRows.push({ ...r, cells });
-          seenPageIds.add(r.notionPageId);
-        }
-        // Append rows added directly in Notion (not yet in local state).
         for (const np of nPages) {
-          if (seenPageIds.has(np.id)) continue;
           const cells: Record<string, NotionPropValue> = {};
           for (const col of synced) {
             const v = (np.properties as Record<string, NotionPropValue>)[col.name];
             cells[col.id] = v ?? defaultCell(col.type);
           }
-          newRows.push({ id: uid('row'), notionPageId: np.id, cells });
+          const local = localByPageId.get(np.id);
+          newRows.push(local ? { ...local, cells } : { id: uid('row'), notionPageId: np.id, cells });
         }
+        // Append local-only rows (pending Notion creation) at bottom.
+        for (const r of prev.rows.filter(r => !r.notionPageId)) newRows.push(r);
 
         const next = { ...prev, columns: synced, rows: newRows };
         try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch {}
@@ -387,7 +379,8 @@ export default function WeeklySummaryPage() {
     const id = uid('row');
     const cells: Record<string, NotionPropValue> = {};
     for (const col of cur.columns) cells[col.id] = defaultCell(col.type);
-    upd(s => ({ ...s, rows: [{ id, cells }, ...s.rows] }));
+    upd(s => ({ ...s, rows: [...s.rows, { id, cells }] }));
+    setTimeout(() => addRowBtnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0);
     if (cur.notion) {
       enqueue(async () => {
         const latest = storeRef.current;
@@ -401,6 +394,18 @@ export default function WeeklySummaryPage() {
         }));
       });
     }
+  }
+
+  function reorderRows(fromId: string, toId: string) {
+    upd(s => {
+      const rows = [...s.rows];
+      const from = rows.findIndex(r => r.id === fromId);
+      const to = rows.findIndex(r => r.id === toId);
+      if (from === -1 || to === -1 || from === to) return s;
+      const [item] = rows.splice(from, 1);
+      rows.splice(to, 0, item);
+      return { ...s, rows };
+    });
   }
 
   function deleteRow(rowId: string) {
@@ -573,7 +578,7 @@ export default function WeeklySummaryPage() {
 
   const cols = store.columns;
   const rows = store.rows;
-  const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 44;
+  const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 44 + 28;
   const isConnected = !!store.notion;
 
   // ── Sync indicator ──────────────────────────────────────────────────────────
@@ -687,6 +692,7 @@ export default function WeeklySummaryPage() {
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: minW }}>
           <thead>
             <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-color)' }}>
+              <th style={{ width: 28, minWidth: 28, borderRight: '1px solid var(--border-color)' }} />
               {cols.map(col => (
                 <th
                   key={col.id}
@@ -723,12 +729,29 @@ export default function WeeklySummaryPage() {
               <tr
                 key={row.id}
                 onMouseEnter={() => setHoveredRow(row.id)} onMouseLeave={() => setHoveredRow(null)}
+                onDragOver={e => { e.preventDefault(); setDragOverRowId(row.id); }}
+                onDrop={() => { if (dragRowId && dragRowId !== row.id) reorderRows(dragRowId, row.id); setDragOverRowId(null); }}
                 style={{
                   borderBottom: '1px solid var(--border-color)',
-                  background: hoveredRow === row.id ? 'rgba(255,255,255,0.018)' : 'transparent',
+                  background: dragOverRowId === row.id
+                    ? 'rgba(59,130,246,0.07)'
+                    : hoveredRow === row.id ? 'rgba(255,255,255,0.018)' : 'transparent',
+                  opacity: dragRowId === row.id ? 0.4 : 1,
                   transition: 'background 80ms',
                 }}
               >
+                <td
+                  draggable
+                  onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragRowId(row.id); }}
+                  onDragEnd={() => { setDragRowId(null); setDragOverRowId(null); }}
+                  style={{
+                    width: 28, minWidth: 28, textAlign: 'center', verticalAlign: 'middle',
+                    borderRight: '1px solid var(--border-color)',
+                    cursor: 'grab', color: 'var(--text-muted)', fontSize: 14,
+                    opacity: hoveredRow === row.id ? 0.6 : 0,
+                    transition: 'opacity 120ms', userSelect: 'none',
+                  }}
+                >⠿</td>
                 {cols.map(col => (
                   <td
                     key={col.id}
@@ -760,7 +783,7 @@ export default function WeeklySummaryPage() {
                 </td>
               </tr>
             ))}
-            <tr>
+            <tr ref={addRowBtnRef}>
               <td colSpan={cols.length + 1} style={{ padding: '3px 6px' }}>
                 <button
                   onClick={addRow}

@@ -406,6 +406,70 @@ export async function getDbSchema(creds?: { key?: string; dbId?: string; realDbI
   return schema;
 }
 
+export async function applyViewOrder(
+  schema: NotionDbSchema,
+  dataSourceId: string,
+  key: string,
+): Promise<{ schema: NotionDbSchema; viewSorts: Array<Record<string, unknown>> }> {
+  let viewSorts: Array<Record<string, unknown>> = [];
+  try {
+    const headers = makeHeaders(key);
+    const listRes = await fetch(
+      `https://api.notion.com/v1/views?data_source_id=${encodeURIComponent(dataSourceId)}`,
+      { headers },
+    );
+    if (!listRes.ok) return { schema, viewSorts };
+    const listData = await listRes.json() as Record<string, unknown>;
+    const viewIds = ((listData.results as Array<Record<string, unknown>>) ?? [])
+      .map(v => v.id as string).filter(Boolean);
+    for (const viewId of viewIds) {
+      try {
+        const vRes = await fetch(`https://api.notion.com/v1/views/${viewId}`, { headers });
+        if (!vRes.ok) continue;
+        const view = await vRes.json() as Record<string, unknown>;
+        if (view.type !== 'table') continue;
+        const cfg = view.configuration as Record<string, unknown> | undefined;
+        const rawSorts = (cfg?.sorts as Array<Record<string, unknown>>) ?? [];
+
+        // Ensure new rows always appear at bottom: force created_time ascending.
+        const hasAscCreated = rawSorts.some(
+          s => s.timestamp === 'created_time' && s.direction === 'ascending',
+        );
+        if (!hasAscCreated) {
+          viewSorts = [{ timestamp: 'created_time', direction: 'ascending' }];
+          fetch(`https://api.notion.com/v1/views/${viewId}`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({
+              configuration: { sorts: viewSorts },
+            }),
+          }).catch(() => {});
+        } else {
+          viewSorts = rawSorts;
+        }
+
+        const viewProps = (cfg?.properties as Array<Record<string, unknown>>) ?? [];
+        if (viewProps.length > 0) {
+          const propById = new Map(schema.properties.map(p => [p.id, p]));
+          const ordered: NotionPropDef[] = [];
+          const seen = new Set<string>();
+          for (const vp of viewProps) {
+            const pid = vp.property_id as string;
+            const prop = propById.get(pid);
+            if (prop) { ordered.push(prop); seen.add(prop.id); }
+          }
+          for (const p of schema.properties) {
+            if (!seen.has(p.id)) ordered.push(p);
+          }
+          return { schema: { ...schema, properties: ordered }, viewSorts };
+        }
+        return { schema, viewSorts };
+      } catch { /* try next view */ }
+    }
+  } catch { /* keep schema as-is */ }
+  return { schema, viewSorts };
+}
+
 export async function getAllPages(creds?: { key?: string; dbId?: string }): Promise<{
   pages: NotionPage[];
   realDbId: string;
@@ -427,6 +491,7 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
         data_source_id: dataSourceId,
         start_cursor: cursor,
         page_size: 100,
+        sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
       });
       const results: unknown[] = res.results ?? [];
       for (const raw of results) {
@@ -445,7 +510,10 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
     let dbCursor: string | undefined;
     try {
       do {
-        const body: Record<string, unknown> = { page_size: 100 };
+        const body: Record<string, unknown> = {
+          page_size: 100,
+          sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
+        };
         if (dbCursor) body.start_cursor = dbCursor;
         const res = await fetch(`https://api.notion.com/v1/databases/${dataSourceId}/query`, {
           method: 'POST', headers, body: JSON.stringify(body),
@@ -481,7 +549,8 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
     if (discovered) realDbId = discovered;
   }
 
-  return { pages: [...pageMap.values()], realDbId };
+  const pages = [...pageMap.values()].sort((a, b) => a.createdTime.localeCompare(b.createdTime));
+  return { pages, realDbId };
 }
 
 export async function getPage(pageId: string, creds?: { key?: string }): Promise<NotionPage> {

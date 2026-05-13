@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseDbSchema, parsePage } from '@/lib/notion-page';
+import { parseDbSchema, parsePage, applyViewOrder } from '@/lib/notion-page';
 import { notionHeaders, resolveDataSourceId } from '@/lib/weekly-notion';
 
 export async function GET(
@@ -24,12 +24,15 @@ export async function GET(
       );
     }
     const dsRaw = await dsRes.json() as Record<string, unknown>;
-    const schema = parseDbSchema(dsRaw);
+    const { schema, viewSorts } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
 
     const pages: ReturnType<typeof parsePage>[] = [];
     let cursor: string | undefined;
     do {
-      const body: Record<string, unknown> = { page_size: 100 };
+      const sorts = viewSorts.length > 0
+        ? viewSorts
+        : [{ timestamp: 'created_time', direction: 'ascending' }];
+      const body: Record<string, unknown> = { page_size: 100, sorts };
       if (cursor) body.start_cursor = cursor;
       const qRes = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
         method: 'POST',
@@ -45,6 +48,7 @@ export async function GET(
       cursor = data.next_cursor ?? undefined;
     } while (cursor);
 
+    pages.sort((a, b) => a.createdTime.localeCompare(b.createdTime));
     return NextResponse.json({ schema, pages });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
@@ -79,7 +83,8 @@ export async function PATCH(
       );
     }
     const dsRaw = await res.json() as Record<string, unknown>;
-    return NextResponse.json({ schema: parseDbSchema(dsRaw) });
+    const { schema } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
+    return NextResponse.json({ schema });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
   }
