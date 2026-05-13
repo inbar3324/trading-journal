@@ -418,7 +418,7 @@ export async function applyViewOrder(
       `https://api.notion.com/v1/views?data_source_id=${encodeURIComponent(dataSourceId)}`,
       { headers },
     );
-    if (!listRes.ok) return { schema, viewSorts };
+    if (!listRes.ok) return { schema, viewSorts, orderFromView: false };
     const listData = await listRes.json() as Record<string, unknown>;
     const viewIds = ((listData.results as Array<Record<string, unknown>>) ?? [])
       .map(v => v.id as string).filter(Boolean);
