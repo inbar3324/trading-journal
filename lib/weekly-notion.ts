@@ -73,6 +73,26 @@ export function buildDbProperties(columns: WColumn[]): Record<string, unknown> {
 
 // ── Build page properties body from row cells ────────────────────────────────
 
+// Strip empty cells so new rows reach Notion without forcing a sort position
+// (mirrors the JOURNAL commitInline filter in app/journal/page.tsx).
+function isEmptyCell(cell: NotionPropValue): boolean {
+  switch (cell.type) {
+    case 'title':
+    case 'rich_text': return !cell.text;
+    case 'multi_select': return cell.options.length === 0;
+    case 'select':
+    case 'status': return !cell.option;
+    case 'date': return !cell.start;
+    case 'url':
+    case 'email':
+    case 'phone_number': return !cell.value;
+    case 'number': return cell.value === null;
+    case 'checkbox': return cell.value === false;
+    case 'files': return cell.files.length === 0;
+    default: return false;
+  }
+}
+
 export function buildPageProperties(
   columns: WColumn[],
   cells: Record<string, NotionPropValue>,
@@ -81,6 +101,7 @@ export function buildPageProperties(
   columns.forEach((col, idx) => {
     const cell = cells[col.id];
     if (!cell) return;
+    if (isEmptyCell(cell)) return;
     const isTitle = col.notionType ? col.notionType === 'title' : idx === 0;
     const v = valueToPageProp(cell, isTitle);
     if (v !== null && v !== undefined) props[col.name] = v;

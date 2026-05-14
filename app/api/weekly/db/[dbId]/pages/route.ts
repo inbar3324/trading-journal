@@ -23,7 +23,7 @@ export async function POST(
       method: 'POST',
       headers: notionHeaders(key),
       body: JSON.stringify({
-        parent: { type: 'data_source_id', data_source_id: dataSourceId },
+        parent: { data_source_id: dataSourceId },
         properties,
       }),
     });

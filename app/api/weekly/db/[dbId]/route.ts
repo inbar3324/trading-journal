@@ -46,20 +46,12 @@ function clientSort(pages: NotionPage[], sorts: Array<Record<string, unknown>>):
   });
 }
 
-// Determine the best sorts to use:
-// 1. viewSorts with property sorts (Notion API respects these)
-// 2. Fallback: created_time ascending (matches Notion's default no-sort order)
-function resolveSorts(viewSorts: Array<Record<string, unknown>>): {
+// Always sort by created_time ascending (matches JOURNAL behavior: oldest first, newest last).
+// Ignoring view sorts ensures website order stays consistent regardless of Notion view config.
+function resolveSorts(): {
   apiSorts: Array<Record<string, unknown>>;
   sorts: Array<Record<string, unknown>>;
 } {
-  // Use view property sorts if present (API respects property sorts but NOT timestamp sorts)
-  const propSorts = viewSorts.filter(s => s.property);
-  if (propSorts.length > 0) {
-    return { apiSorts: propSorts, sorts: propSorts };
-  }
-
-  // Fallback: created_time ascending — matches Notion's default row order when no sort is set
   const createdTimeSort = [{ timestamp: 'created_time', direction: 'ascending' }];
   return { apiSorts: createdTimeSort, sorts: createdTimeSort };
 }
@@ -67,9 +59,8 @@ function resolveSorts(viewSorts: Array<Record<string, unknown>>): {
 async function fetchAllPages(
   dataSourceId: string,
   headers: Record<string, string>,
-  viewSorts: Array<Record<string, unknown>>,
 ): Promise<NotionPage[]> {
-  const { apiSorts, sorts } = resolveSorts(viewSorts);
+  const { apiSorts, sorts } = resolveSorts();
   const pages: NotionPage[] = [];
 
   // Primary: data_sources query (Notion 2025-09-03)
@@ -134,9 +125,9 @@ export async function GET(
       );
     }
     const dsRaw = await dsRes.json() as Record<string, unknown>;
-    const { schema, orderFromView, viewSorts } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
+    const { schema, orderFromView } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
 
-    const pages = await fetchAllPages(dataSourceId, headers, viewSorts);
+    const pages = await fetchAllPages(dataSourceId, headers);
     return NextResponse.json({ schema, pages, orderFromView });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
