@@ -37,7 +37,7 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit,
   function startEdit(e: React.MouseEvent) {
     if (readOnly) return;
     e.stopPropagation();
-    if (prop.type === 'select' || prop.type === 'multi_select' || prop.type === 'status') {
+    if (prop.type === 'select' || prop.type === 'multi_select' || prop.type === 'status' || prop.type === 'date') {
       if (containerRef.current) setPopRect(containerRef.current.getBoundingClientRect());
       return;
     }
@@ -90,6 +90,30 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit,
         >
           <DisplayValue value={value} onImageClick={prop.type === 'files' ? (i) => setLightboxIdx(i) : undefined} />
         </div>
+      </>
+    );
+  }
+
+  // ── Popover (date range) ───────────────────────────────────────────────────
+  if (popRect && prop.type === 'date') {
+    return (
+      <>
+        <div ref={containerRef} style={{ width: '100%', minHeight: 22, display: 'flex', alignItems: 'center' }}>
+          <DisplayValue value={value} />
+        </div>
+        {createPortal(
+          <DateRangePopover
+            anchorRect={popRect}
+            initStart={value.type === 'date' ? (value.start?.split('T')[0] ?? '') : ''}
+            initEnd={value.type === 'date' ? (value.end?.split('T')[0] ?? '') : ''}
+            onCommit={(s, e) => {
+              onCommit({ type: 'date', start: s || null, end: e || null, hasTime: false });
+              setPopRect(null);
+            }}
+            onClose={() => setPopRect(null)}
+          />,
+          document.body
+        )}
       </>
     );
   }
@@ -397,6 +421,112 @@ function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile
 
   // Anything else falls back to display.
   return <DisplayValue value={value} />;
+}
+
+function DateRangePopover({
+  anchorRect, initStart, initEnd, onCommit, onClose,
+}: {
+  anchorRect: DOMRect;
+  initStart: string;
+  initEnd: string;
+  onCommit: (start: string, end: string) => void;
+  onClose: () => void;
+}) {
+  const [start, setStart] = useState(initStart);
+  const [end, setEnd] = useState(initEnd);
+  const [hasEnd, setHasEnd] = useState(!!initEnd);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  const popWidth = 252;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const spaceBelow = vh - anchorRect.bottom - 8;
+  const top = spaceBelow > 260 ? anchorRect.bottom + 6 : anchorRect.top - 6 - Math.min(260, 260);
+  const left = Math.min(anchorRect.left, vw - popWidth - 12);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.target as Node)) {
+        onCommit(start, hasEnd ? end : '');
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [start, end, hasEnd, onCommit, onClose]);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
+    borderRadius: 6, padding: '6px 10px', fontSize: 13,
+    color: 'var(--text-primary)', colorScheme: 'dark', outline: 'none',
+  };
+
+  return (
+    <div
+      ref={popRef}
+      style={{
+        position: 'fixed', top, left, zIndex: 9999, width: popWidth,
+        background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+        borderRadius: 10, boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
+        padding: '14px 14px 12px',
+      }}
+    >
+      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+        Date
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Start</div>
+        <input type="date" autoFocus value={start} onChange={e => setStart(e.target.value)} style={inputStyle} />
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: hasEnd ? 10 : 12, userSelect: 'none' }}>
+        <div
+          onClick={() => { setHasEnd(h => !h); if (hasEnd) setEnd(''); }}
+          style={{
+            width: 28, height: 16, borderRadius: 8, flexShrink: 0,
+            background: hasEnd ? 'var(--blue)' : 'var(--border-hover)',
+            position: 'relative', cursor: 'pointer', transition: 'background 150ms',
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: 2, left: hasEnd ? 14 : 2,
+            width: 12, height: 12, borderRadius: '50%',
+            background: 'white', transition: 'left 150ms', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+          }} />
+        </div>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>End date</span>
+      </label>
+
+      {hasEnd && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>End</div>
+          <input type="date" value={end} min={start || undefined} onChange={e => setEnd(e.target.value)} style={inputStyle} />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 }}>
+        {(start || end) ? (
+          <button
+            onClick={() => { setStart(''); setEnd(''); setHasEnd(false); }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}
+          >Clear</button>
+        ) : <span />}
+        <button
+          onClick={() => onCommit(start, hasEnd ? end : '')}
+          style={{
+            background: 'var(--blue)', border: 'none', color: 'white',
+            fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            padding: '5px 14px', borderRadius: 6,
+          }}
+        >Apply</button>
+      </div>
+    </div>
+  );
 }
 
 function TextareaInput({
