@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseDbSchema, parsePage, applyViewOrder, type NotionPage, type NotionDbSchema, type NotionPropValue } from '@/lib/notion-page';
+import { parseDbSchema, parsePage, applyViewOrder, type NotionPage, type NotionPropValue } from '@/lib/notion-page';
 import { notionHeaders, resolveDataSourceId } from '@/lib/weekly-notion';
 
 // Extract a sort key from a page property value (for client-side sort fallback).
@@ -48,9 +48,8 @@ function clientSort(pages: NotionPage[], sorts: Array<Record<string, unknown>>):
 
 // Determine the best sorts to use:
 // 1. viewSorts with property sorts (Notion API respects these)
-// 2. First date property in schema (heuristic for date-keyed summary tables)
-// 3. Fallback: created_time (same as getAllPages in notion-page.ts)
-function resolveSorts(viewSorts: Array<Record<string, unknown>>, schema: NotionDbSchema): {
+// 2. Fallback: created_time ascending (matches Notion's default no-sort order)
+function resolveSorts(viewSorts: Array<Record<string, unknown>>): {
   apiSorts: Array<Record<string, unknown>>;
   sorts: Array<Record<string, unknown>>;
 } {
@@ -60,14 +59,7 @@ function resolveSorts(viewSorts: Array<Record<string, unknown>>, schema: NotionD
     return { apiSorts: propSorts, sorts: propSorts };
   }
 
-  // Detect first date property and sort by it (typical for weekly summary tables)
-  const dateProp = schema.properties.find(p => p.type === 'date');
-  if (dateProp) {
-    const sorts = [{ property: dateProp.name, direction: 'ascending' }];
-    return { apiSorts: sorts, sorts };
-  }
-
-  // Last resort: created_time ascending, same as JOURNAL (getAllPages)
+  // Fallback: created_time ascending — matches Notion's default row order when no sort is set
   const createdTimeSort = [{ timestamp: 'created_time', direction: 'ascending' }];
   return { apiSorts: createdTimeSort, sorts: createdTimeSort };
 }
@@ -75,10 +67,9 @@ function resolveSorts(viewSorts: Array<Record<string, unknown>>, schema: NotionD
 async function fetchAllPages(
   dataSourceId: string,
   headers: Record<string, string>,
-  schema: NotionDbSchema,
   viewSorts: Array<Record<string, unknown>>,
 ): Promise<NotionPage[]> {
-  const { apiSorts, sorts } = resolveSorts(viewSorts, schema);
+  const { apiSorts, sorts } = resolveSorts(viewSorts);
   const pages: NotionPage[] = [];
 
   // Primary: data_sources query (Notion 2025-09-03)
@@ -145,7 +136,7 @@ export async function GET(
     const dsRaw = await dsRes.json() as Record<string, unknown>;
     const { schema, orderFromView, viewSorts } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
 
-    const pages = await fetchAllPages(dataSourceId, headers, schema, viewSorts);
+    const pages = await fetchAllPages(dataSourceId, headers, viewSorts);
     return NextResponse.json({ schema, pages, orderFromView });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
