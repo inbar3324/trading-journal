@@ -429,7 +429,8 @@ export async function applyViewOrder(
         const view = await vRes.json() as Record<string, unknown>;
         if (view.type !== 'table') continue;
         const cfg = view.configuration as Record<string, unknown> | undefined;
-        const rawSorts = (cfg?.sorts as Array<Record<string, unknown>>) ?? [];
+        // Notion API returns sorts at view top-level, not inside configuration
+        const rawSorts = (view.sorts as Array<Record<string, unknown>> | null) ?? [];
 
         // Map view sorts to Notion query API format (property_id → property name).
         const propByIdMap = new Map(schema.properties.map(p => [p.id, p.name]));
