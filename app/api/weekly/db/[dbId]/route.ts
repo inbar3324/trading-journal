@@ -1,6 +1,126 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseDbSchema, parsePage, applyViewOrder } from '@/lib/notion-page';
+import { parseDbSchema, parsePage, applyViewOrder, type NotionPage, type NotionDbSchema, type NotionPropValue } from '@/lib/notion-page';
 import { notionHeaders, resolveDataSourceId } from '@/lib/weekly-notion';
+
+// Extract a sort key from a page property value (for client-side sort fallback).
+function getSortKey(page: NotionPage, sort: Record<string, unknown>): string | number {
+  if (sort.timestamp === 'created_time') return page.createdTime;
+  if (sort.timestamp === 'last_edited_time') return page.lastEditedTime;
+  const propName = sort.property as string | undefined;
+  if (!propName) return '';
+  const val: NotionPropValue | undefined = page.properties[propName];
+  if (!val) return '';
+  switch (val.type) {
+    case 'date': return val.start ?? '';
+    case 'number': return val.value ?? 0;
+    case 'title': case 'rich_text': return val.text;
+    case 'select': case 'status': return val.option?.name ?? '';
+    case 'created_time': case 'last_edited_time': return val.value;
+    case 'checkbox': return val.value ? '1' : '0';
+    default: return '';
+  }
+}
+
+// Sort pages client-side by an array of sort descriptors.
+// Nulls/empty values are sorted LAST (ascending direction).
+function clientSort(pages: NotionPage[], sorts: Array<Record<string, unknown>>): NotionPage[] {
+  return [...pages].sort((a, b) => {
+    for (const s of sorts) {
+      const ak = getSortKey(a, s);
+      const bk = getSortKey(b, s);
+      const dir = (s.direction as string) === 'descending' ? -1 : 1;
+      const aEmpty = ak === '' || ak === 0;
+      const bEmpty = bk === '' || bk === 0;
+      if (aEmpty && bEmpty) continue;
+      if (aEmpty) return 1;   // nulls last regardless of direction
+      if (bEmpty) return -1;
+      if (typeof ak === 'number' && typeof bk === 'number') {
+        if (ak !== bk) return (ak < bk ? -1 : 1) * dir;
+      } else {
+        const cmp = String(ak).localeCompare(String(bk));
+        if (cmp !== 0) return cmp * dir;
+      }
+    }
+    // Tiebreaker: created_time ascending (oldest first), matching Notion's table UI row order
+    return a.createdTime.localeCompare(b.createdTime);
+  });
+}
+
+// Determine the best sorts to use:
+// 1. viewSorts with property sorts (Notion API respects these)
+// 2. First date property in schema (heuristic for date-keyed summary tables)
+// 3. Fallback: created_time (same as getAllPages in notion-page.ts)
+function resolveSorts(viewSorts: Array<Record<string, unknown>>, schema: NotionDbSchema): {
+  apiSorts: Array<Record<string, unknown>>;
+  sorts: Array<Record<string, unknown>>;
+} {
+  // Use view property sorts if present (API respects property sorts but NOT timestamp sorts)
+  const propSorts = viewSorts.filter(s => s.property);
+  if (propSorts.length > 0) {
+    return { apiSorts: propSorts, sorts: propSorts };
+  }
+
+  // Detect first date property and sort by it (typical for weekly summary tables)
+  const dateProp = schema.properties.find(p => p.type === 'date');
+  if (dateProp) {
+    const sorts = [{ property: dateProp.name, direction: 'ascending' }];
+    return { apiSorts: sorts, sorts };
+  }
+
+  // Last resort: created_time ascending, same as JOURNAL (getAllPages)
+  const createdTimeSort = [{ timestamp: 'created_time', direction: 'ascending' }];
+  return { apiSorts: createdTimeSort, sorts: createdTimeSort };
+}
+
+async function fetchAllPages(
+  dataSourceId: string,
+  headers: Record<string, string>,
+  schema: NotionDbSchema,
+  viewSorts: Array<Record<string, unknown>>,
+): Promise<NotionPage[]> {
+  const { apiSorts, sorts } = resolveSorts(viewSorts, schema);
+  const pages: NotionPage[] = [];
+
+  // Primary: data_sources query (Notion 2025-09-03)
+  let cursor: string | undefined;
+  try {
+    do {
+      const body: Record<string, unknown> = { page_size: 100, sorts: apiSorts };
+      if (cursor) body.start_cursor = cursor;
+      const res = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
+        method: 'POST', headers, body: JSON.stringify(body),
+      });
+      if (!res.ok) break;
+      const data = await res.json() as { results?: Array<Record<string, unknown>>; next_cursor?: string | null };
+      for (const r of data.results ?? []) {
+        if (r.archived) continue;
+        pages.push(parsePage(r));
+      }
+      cursor = data.next_cursor ?? undefined;
+    } while (cursor);
+  } catch { /* try fallback */ }
+
+  // Fallback: direct databases query (same as getAllPages in notion-page.ts)
+  if (pages.length === 0) {
+    let dbCursor: string | undefined;
+    try {
+      do {
+        const body: Record<string, unknown> = { page_size: 100, sorts: apiSorts };
+        if (dbCursor) body.start_cursor = dbCursor;
+        const res = await fetch(`https://api.notion.com/v1/databases/${dataSourceId}/query`, {
+          method: 'POST', headers, body: JSON.stringify(body),
+        });
+        if (!res.ok) break;
+        const data = await res.json() as { results?: Array<Record<string, unknown>>; next_cursor?: string | null };
+        for (const r of data.results ?? []) pages.push(parsePage(r));
+        dbCursor = data.next_cursor ?? undefined;
+      } while (dbCursor);
+    } catch { /* ignore */ }
+  }
+
+  // Client-side sort ensures correct order even when API ignores timestamp sorts
+  return clientSort(pages, sorts);
+}
 
 export async function GET(
   req: NextRequest,
@@ -14,7 +134,6 @@ export async function GET(
     const headers = notionHeaders(key);
     const dataSourceId = await resolveDataSourceId(dbId, key);
 
-    // Schema lives on the data source (Notion 2025-09-03)
     const dsRes = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}`, { headers });
     if (!dsRes.ok) {
       const err = await dsRes.json().catch(() => ({}));
@@ -24,43 +143,10 @@ export async function GET(
       );
     }
     const dsRaw = await dsRes.json() as Record<string, unknown>;
-    const { schema, orderFromView } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
+    const { schema, orderFromView, viewSorts } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
 
-    const pages: ReturnType<typeof parsePage>[] = [];
-    let cursor: string | undefined;
-    do {
-      // Always request ascending by created_time; post-sort below handles any API non-compliance.
-      const body: Record<string, unknown> = {
-        page_size: 100,
-        sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
-      };
-      if (cursor) body.start_cursor = cursor;
-      const qRes = await fetch(`https://api.notion.com/v1/data_sources/${dataSourceId}/query`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (!qRes.ok) break;
-      const data = await qRes.json() as { results?: Array<Record<string, unknown>>; next_cursor?: string | null };
-      for (const r of data.results ?? []) {
-        if (r.archived) continue;
-        pages.push(parsePage(r));
-      }
-      cursor = data.next_cursor ?? undefined;
-    } while (cursor);
-
-    // Notion's data_sources query returns newest-first regardless of `sorts`, and rows created in
-    // the same second share identical `created_time`. Sort ascending; tiebreak by reverse API index
-    // so equal-time rows flip from newest-first (API) to oldest-first (Notion view order).
-    const indexed = pages.map((p, i) => ({ p, i }));
-    indexed.sort((a, b) => {
-      const at = a.p.createdTime || '9999';
-      const bt = b.p.createdTime || '9999';
-      if (at !== bt) return at < bt ? -1 : 1;
-      return b.i - a.i;
-    });
-    const sortedPages = indexed.map(x => x.p);
-    return NextResponse.json({ schema, pages: sortedPages, orderFromView });
+    const pages = await fetchAllPages(dataSourceId, headers, schema, viewSorts);
+    return NextResponse.json({ schema, pages, orderFromView });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
   }
