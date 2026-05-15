@@ -751,7 +751,7 @@ export default function WeeklySummaryPage() {
       )}
 
       {/* Table */}
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 10 }}>
+      <div className="journal-scroll" style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 10 }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: minW }}>
           <thead>
             <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-color)' }}>
@@ -851,7 +851,7 @@ export default function WeeklySummaryPage() {
                     style={{
                       width: colWidth(toPropDef(col).type),
                       minWidth: colWidth(toPropDef(col).type),
-                      padding: '5px 0', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)',
+                      padding: '5px 8px', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)',
                     }}
                   >
                     <EditableCell
