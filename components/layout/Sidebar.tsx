@@ -56,9 +56,6 @@ export default function Sidebar() {
           >
             TradeJournal
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: '10px', letterSpacing: '0.06em', marginTop: 1 }}>
-            ICT · 2026
-          </div>
         </div>
       </div>
 
