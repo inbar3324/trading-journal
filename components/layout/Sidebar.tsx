@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, CalendarDays, TrendingUp, BookOpen, Table2 } from 'lucide-react';
+import { LayoutDashboard, BarChart2, CalendarDays, BookOpen, Table2 } from 'lucide-react';
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -31,12 +31,23 @@ export default function Sidebar() {
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.14) 0%, rgba(59,130,246,0.04) 100%)',
-            border: '1px solid rgba(59,130,246,0.22)',
+            background: 'linear-gradient(135deg, rgba(232,168,32,0.14) 0%, rgba(200,132,14,0.05) 100%)',
+            border: '1px solid rgba(232,168,32,0.22)',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
           }}
         >
-          <TrendingUp size={16} color="var(--blue)" strokeWidth={2.2} />
+          <svg viewBox="0 0 20 18" width="18" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <line x1="4" y1="16.5" x2="16" y2="16.5" stroke="#E8A820" strokeWidth="1" strokeLinecap="round" opacity="0.35"/>
+            <line x1="4" y1="10" x2="4" y2="8.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="4" y1="14.5" x2="4" y2="16" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
+            <rect x="1.75" y="10" width="4.5" height="4.5" rx="1" fill="#E8A820" opacity="0.75"/>
+            <line x1="10" y1="6.5" x2="10" y2="4.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="10" y1="13.5" x2="10" y2="15.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
+            <rect x="7.75" y="6.5" width="4.5" height="7" rx="1" fill="#E8A820" opacity="0.88"/>
+            <line x1="16" y1="2.5" x2="16" y2="1" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="16" y1="12" x2="16" y2="13.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
+            <rect x="13.75" y="2.5" width="4.5" height="9.5" rx="1" fill="#F5C84A"/>
+          </svg>
         </div>
         <div>
           <div

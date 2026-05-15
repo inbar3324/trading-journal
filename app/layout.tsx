@@ -13,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" className="dark">
       <head>
+        <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#131316" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
