@@ -17,7 +17,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-full w-[220px] flex flex-col"
+      className="fixed left-0 top-0 h-full w-[220px] hidden md:flex flex-col"
       style={{
         background: 'linear-gradient(180deg, #0B0B0F 0%, #0E0E13 60%, #0C0C10 100%)',
         borderRight: '1px solid var(--border-color)',

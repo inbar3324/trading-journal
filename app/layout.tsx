@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Sidebar from '@/components/layout/Sidebar';
+import MobileNav from '@/components/layout/MobileNav';
 import PWAInstall from '@/components/ui/PWAInstall';
 import NotionConfigProvider from '@/components/providers/NotionConfigProvider';
 
@@ -26,9 +27,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
         <NotionConfigProvider>
           <Sidebar />
-          <main className="flex-1 ml-[220px] overflow-y-auto" style={{ background: 'var(--bg-primary)' }}>
+          <main
+            className="flex-1 md:ml-[220px] overflow-y-auto"
+            style={{
+              background: 'var(--bg-primary)',
+              paddingBottom: 'calc(56px + env(safe-area-inset-bottom))',
+            }}
+          >
             {children}
           </main>
+          <MobileNav />
         </NotionConfigProvider>
         <PWAInstall />
       </body>
