@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { WColumn } from '@/lib/weekly-types';
-import type { NotionPropValue } from '@/lib/notion-page';
+import { parsePage, type NotionPropValue } from '@/lib/notion-page';
 import { buildPageProperties, notionHeaders, resolveDataSourceId } from '@/lib/weekly-notion';
 
 export async function POST(
@@ -50,8 +50,8 @@ export async function POST(
         );
       }
     }
-    const page = await res.json() as { id: string };
-    return NextResponse.json({ pageId: page.id });
+    const raw = await res.json() as Record<string, unknown>;
+    return NextResponse.json({ page: parsePage(raw) });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
   }

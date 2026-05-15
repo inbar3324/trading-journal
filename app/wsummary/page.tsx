@@ -425,10 +425,23 @@ export default function WeeklySummaryPage() {
         if (!latest?.notion) return;
         const latestRow = latest.rows.find(r => r.id === id);
         const sendCells = latestRow?.cells ?? cells;
-        const { pageId } = await apiCreatePage(latest.notion.dbId, latest.columns, sendCells);
+        const { page } = await apiCreatePage(latest.notion.dbId, latest.columns, sendCells);
+        // Mirror JOURNAL: attach notionPageId AND server cells in one shot.
+        // The next 15s poll (or any explicit refresh) will fold this row into
+        // Notion's view order. We do NOT force-pull here — Notion has eventual
+        // consistency on data_sources queries, so an immediate pull might miss
+        // the just-created page and either drop or duplicate the row.
         upd(s => ({
           ...s,
-          rows: s.rows.map(r => r.id === id ? { ...r, notionPageId: pageId } : r),
+          rows: s.rows.map(r => {
+            if (r.id !== id) return r;
+            const cellsFromServer: Record<string, NotionPropValue> = {};
+            for (const col of s.columns) {
+              const v = (page.properties as Record<string, NotionPropValue>)[col.name];
+              cellsFromServer[col.id] = v ?? r.cells[col.id] ?? defaultCell(col.type);
+            }
+            return { ...r, notionPageId: page.id, cells: cellsFromServer };
+          }),
         }));
       });
     }

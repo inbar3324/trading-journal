@@ -80,7 +80,7 @@ export async function createPage(
   dbId: string,
   columns: WColumn[],
   cells: Record<string, NotionPropValue>,
-): Promise<{ pageId: string }> {
+): Promise<{ page: NotionPageRaw }> {
   return callJson(
     `/api/weekly/db/${dbId}/pages`,
     { method: 'POST', headers: headers(), body: JSON.stringify({ columns, cells }) },

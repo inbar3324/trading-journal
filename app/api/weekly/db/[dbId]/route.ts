@@ -23,6 +23,11 @@ function getSortKey(page: NotionPage, sort: Record<string, unknown>): string | n
 
 // Sort pages client-side by an array of sort descriptors.
 // Nulls/empty values are sorted LAST (ascending direction).
+// IMPORTANT: For tied values, returns 0 (stable sort) so we preserve Notion's
+// API response order — Notion already applies the view's tiebreak there, and
+// forcing a local tiebreak (e.g. created_time ASC) makes the website diverge
+// from Notion's UI when the view tiebreaks differently. This is the fix for
+// the W.SUMMARY "last two rows swapped" bug.
 function clientSort(pages: NotionPage[], sorts: Array<Record<string, unknown>>): NotionPage[] {
   return [...pages].sort((a, b) => {
     for (const s of sorts) {
@@ -41,17 +46,18 @@ function clientSort(pages: NotionPage[], sorts: Array<Record<string, unknown>>):
         if (cmp !== 0) return cmp * dir;
       }
     }
-    // Tiebreaker: created_time ascending (oldest first), matching Notion's table UI row order
-    return a.createdTime.localeCompare(b.createdTime);
+    // Stable: preserve API order when all sort keys tie.
+    return 0;
   });
 }
 
-// Always sort by created_time ascending (matches JOURNAL behavior: oldest first, newest last).
-// Ignoring view sorts ensures website order stays consistent regardless of Notion view config.
-function resolveSorts(): {
+// Use Notion view sorts when available so the website mirrors Notion 1:1.
+// Falls back to `created_time ascending` (JOURNAL default: oldest first, newest last).
+function resolveSorts(viewSorts: Array<Record<string, unknown>>): {
   apiSorts: Array<Record<string, unknown>>;
   sorts: Array<Record<string, unknown>>;
 } {
+  if (viewSorts.length > 0) return { apiSorts: viewSorts, sorts: viewSorts };
   const createdTimeSort = [{ timestamp: 'created_time', direction: 'ascending' }];
   return { apiSorts: createdTimeSort, sorts: createdTimeSort };
 }
@@ -59,8 +65,9 @@ function resolveSorts(): {
 async function fetchAllPages(
   dataSourceId: string,
   headers: Record<string, string>,
+  viewSorts: Array<Record<string, unknown>>,
 ): Promise<NotionPage[]> {
-  const { apiSorts, sorts } = resolveSorts();
+  const { apiSorts, sorts } = resolveSorts(viewSorts);
   const pages: NotionPage[] = [];
 
   // Primary: data_sources query (Notion 2025-09-03)
@@ -125,9 +132,9 @@ export async function GET(
       );
     }
     const dsRaw = await dsRes.json() as Record<string, unknown>;
-    const { schema, orderFromView } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
+    const { schema, viewSorts, orderFromView } = await applyViewOrder(parseDbSchema(dsRaw), dataSourceId, key);
 
-    const pages = await fetchAllPages(dataSourceId, headers);
+    const pages = await fetchAllPages(dataSourceId, headers, viewSorts);
     return NextResponse.json({ schema, pages, orderFromView });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 });
