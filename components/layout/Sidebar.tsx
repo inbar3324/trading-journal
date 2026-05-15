@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, CalendarDays, BookOpen, Table2 } from 'lucide-react';
+import { LayoutDashboard, BarChart2, CalendarDays, BookOpen, Table2, Smartphone } from 'lucide-react';
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -103,14 +103,28 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4" style={{ borderTop: '1px solid var(--border-color)' }}>
+      <div className="px-4 py-4 flex flex-col gap-2" style={{ borderTop: '1px solid var(--border-color)' }}>
+        <Link
+          href="/install"
+          className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm"
+          style={{
+            background: pathname === '/install'
+              ? 'linear-gradient(90deg, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 100%)'
+              : 'var(--bg-surface)',
+            color: pathname === '/install' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: 500,
+            borderLeft: pathname === '/install' ? '2px solid var(--blue)' : '2px solid transparent',
+            border: pathname === '/install' ? '1px solid var(--accent-border)' : '1px solid var(--border-color)',
+            transition: 'all 160ms var(--ease-out)',
+          }}
+        >
+          <Smartphone size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+          הורד לטלפון
+        </Link>
         <div className="flex items-center gap-2.5 px-1">
           <div
             style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              flexShrink: 0,
+              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
               background: 'var(--green)',
               boxShadow: '0 0 0 2px rgba(16,185,129,0.15)',
               animation: 'pulse-dot 2.5s ease-in-out infinite',
