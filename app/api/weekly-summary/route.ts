@@ -280,7 +280,7 @@ Tags like "FINE SETUP", "GOOD R:R", "MY BIAS WAS RIGHT", "followed plan", "good 
 2. Group the PROBLEM entries by theme. What is the underlying behavior causing the issue?
 3. Count how many entries share the same root cause. The most frequent root cause is the finding.
 4. Describe it as a behavioral pattern — not a list of incidents.
-5. Watching days (no trade taken) are also data — even ones without a note. A high ratio of silent watching days inside an active trading week can itself be the pattern (hesitation, over-filtering, TYPE C). Only surface this if the ratio is clearly skewed and notes/history support it.
+5. Watching days (no trade taken) MUST be analyzed individually — even ones without a note. For each watching day ask: was there a missed opportunity (TYPE B), hesitation (TYPE C), or an unexplained silent day inside an active trading week? A note on a watching day saying "פספסתי" / "לימיט לא נגע" / "הלך בלי" / "ראיתי אבל" is a TYPE B problem and counts toward the recurring pattern. A silent day with no note is weak evidence on its own — but a cluster of silent days inside an active week is itself a TYPE C pattern.
 
 RULES:
 - Write in Hebrew (second person).
@@ -307,7 +307,7 @@ ${analyticsBlock}
 תיאור התקופה — שלב מספרים עם מה שעולה מהיומן. אל תציין תאריכים.
 
 ## בעיה שחוזרת על עצמה
-סווג כל ערך NOTES לפני שכותב. ספור רק בעיות אמיתיות. תאר: מה קורה, מתי זה מופעל, למה זה פוגע בביצועים.
+סווג כל ערך NOTES לפני שכותב — כולל כל יום צפייה בנפרד. עבור כל יום צפייה: האם יש סימן לפספוס הזדמנות (TYPE B), היסוס (TYPE C), או יום שקט לא מוסבר בתוך שבוע פעיל? ספור רק בעיות אמיתיות. תאר: מה קורה, מתי זה מופעל, למה זה פוגע בביצועים.
 
 ## פתרון
 פעולה אחת ספציפית שנגזרת ישירות מהבעיה. אפשר לבצע כבר בסשן הבא.`;
