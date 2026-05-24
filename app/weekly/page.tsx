@@ -189,10 +189,8 @@ export default function WeeklyPage() {
     }
   }
 
-  async function runSummary(trades: Trade[], all: Trade[]) {
-    const dates   = trades.map((t) => t.date).filter(Boolean) as string[];
-    const start   = dates[0] ?? '';
-    const end     = dates[dates.length - 1] ?? '';
+  async function runSummary(trades: Trade[], all: Trade[], rangeOverride: DateRange = 'last_week') {
+    const [start, end] = getDateRangeBounds(rangeOverride);
     const journal = all.filter((t) => t.date && start && end && t.date >= start && t.date <= end);
     await callSummary({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes });
   }
