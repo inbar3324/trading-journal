@@ -195,19 +195,31 @@ ${historyBlock}
 • רגשות בהפסדים: ${topItems(lossTrades, 'rulesFeelings')}`;
 
   const allEntries = journalEntries ?? [];
+  const watchingDays = allEntries.filter((t) => !t.tookTrade.includes('TOOK TRADE'));
+  const tradeDaysCount = new Set(trades.map((t) => t.date).filter(Boolean)).size;
+  const watchingDaysCount = watchingDays.length;
+
+  const tradeNotesBlock = trades
+    .filter((t) => t.notes?.trim())
+    .map((t) => {
+      const ctx = [t.winLose[0] ?? '?', t.rateTrade[0], t.pnl != null ? `${t.pnl >= 0 ? '+' : ''}$${t.pnl}` : null]
+        .filter(Boolean).join(' | ');
+      return `[${ctx}] ${t.notes!.trim()}`;
+    })
+    .join('\n');
+
+  const watchingDaysBlock = watchingDays
+    .map((t) => {
+      const note = t.notes?.trim();
+      return `${t.date ?? '?'} — ${note || '(אין הערה)'}`;
+    })
+    .join('\n');
+
   const journalNotesBlock = [
-    ...trades
-      .filter((t) => t.notes?.trim())
-      .map((t) => {
-        const ctx = [t.winLose[0] ?? '?', t.rateTrade[0], t.pnl != null ? `${t.pnl >= 0 ? '+' : ''}$${t.pnl}` : null]
-          .filter(Boolean).join(' | ');
-        return `[${ctx}] ${t.notes!.trim()}`;
-      }),
-    ...allEntries
-      .filter((t) => !t.tookTrade.includes('TOOK TRADE') && t.notes?.trim())
-      .map((t) => `[ימי צפייה] ${t.notes!.trim()}`),
-    ...(freeNotes.trim() ? [`[הערות חופשיות] ${freeNotes.trim()}`] : []),
-  ].join('\n\n');
+    tradeNotesBlock ? `━ ימי מסחר ━\n${tradeNotesBlock}` : '',
+    watchingDaysBlock ? `━ ימי צפייה (לא נלקחה עסקה) ━\n${watchingDaysBlock}` : '',
+    freeNotes.trim() ? `━ הערות חופשיות ━\n${freeNotes.trim()}` : '',
+  ].filter(Boolean).join('\n\n');
 
   const systemPrompt = `You are a professional trading mentor and data analyst reading a trader's personal journal. Your only job in the "בעיה שחוזרת על עצמה" section is to find the real behavioral problem — the mistake that actually cost money or discipline. Nothing else.
 
@@ -268,6 +280,7 @@ Tags like "FINE SETUP", "GOOD R:R", "MY BIAS WAS RIGHT", "followed plan", "good 
 2. Group the PROBLEM entries by theme. What is the underlying behavior causing the issue?
 3. Count how many entries share the same root cause. The most frequent root cause is the finding.
 4. Describe it as a behavioral pattern — not a list of incidents.
+5. Watching days (no trade taken) are also data — even ones without a note. A high ratio of silent watching days inside an active trading week can itself be the pattern (hesitation, over-filtering, TYPE C). Only surface this if the ratio is clearly skewed and notes/history support it.
 
 RULES:
 - Write in Hebrew (second person).
@@ -279,6 +292,7 @@ TONE: Professional mentor. Evidence-based. Sharp. Direct.`;
 
   const userPrompt = `תקופה: ${weekStart} עד ${weekEnd}
 ${trades.length} עסקאות | ${wins}W / ${losses}L | Win Rate: ${winRate}% | PNL: ${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}
+${tradeDaysCount} ימי מסחר | ${watchingDaysCount} ימי צפייה
 
 ━━━ יומן (המקור העיקרי לניתוח) ━━━
 ${journalNotesBlock || '(אין הערות בתקופה זו)'}
