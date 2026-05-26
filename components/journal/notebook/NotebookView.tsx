@@ -20,18 +20,19 @@ interface Props {
 function sortPagesByDate(pages: NotionPage[], schema: NotionDbSchema): NotionPage[] {
   const dateProp = schema.properties.find(p => p.type === 'date');
   if (!dateProp) return pages;
+  const dateName = dateProp.name;
   const dated: NotionPage[] = [];
   const undated: NotionPage[] = [];
   for (const p of pages) {
-    const v = p.properties[dateProp.name];
+    const v = p.properties[dateName];
     if (v && v.type === 'date' && v.start) dated.push(p);
     else undated.push(p);
   }
   dated.sort((a, b) => {
-    const va = a.properties[dateProp.name];
-    const vb = b.properties[dateProp.name];
-    const sa = va.type === 'date' ? (va.start ?? '') : '';
-    const sb = vb.type === 'date' ? (vb.start ?? '') : '';
+    const va = a.properties[dateName];
+    const vb = b.properties[dateName];
+    const sa = va && va.type === 'date' ? (va.start ?? '') : '';
+    const sb = vb && vb.type === 'date' ? (vb.start ?? '') : '';
     return sb.localeCompare(sa);
   });
   return [...dated, ...undated];
