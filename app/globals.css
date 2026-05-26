@@ -54,10 +54,67 @@
   --blue-dim: rgba(59, 130, 246, 0.08);
   --purple-dim: rgba(124, 58, 237, 0.08);
 
+  /* ── Sidebar ── */
+  --sidebar-bg: linear-gradient(180deg, #0B0B0F 0%, #0E0E13 60%, #0C0C10 100%);
+  --sidebar-bg-mobile: linear-gradient(180deg, #0B0B0F 0%, #0E0E13 100%);
+  --sidebar-border: var(--border-color);
+  --sidebar-text-primary: var(--text-primary);
+  --sidebar-text-secondary: var(--text-secondary);
+  --sidebar-text-muted: var(--text-muted);
+  --sidebar-surface: var(--bg-surface);
+  --sidebar-item-active-bg: linear-gradient(90deg, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 100%);
+  --sidebar-accent: var(--blue);
+  --sidebar-accent-border: var(--accent-border);
+
   /* ── Motion easing ── */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-snap: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root.light,
+html.light {
+  --bg-primary: #F2F2EF;
+  --bg-card: #FAFAF8;
+  --bg-surface: #EBEBE8;
+  --bg-elevated: #E1E1DE;
+
+  --border-color: #DEDEDB;
+  --border-hover: #C8C8C5;
+  --border-glow: rgba(0, 0, 0, 0.04);
+
+  --text-primary: #14141A;
+  --text-secondary: #56565E;
+  --text-muted: #9A9A9F;
+
+  --accent-dim: rgba(59, 130, 246, 0.10);
+  --accent-border: rgba(59, 130, 246, 0.28);
+
+  --tier-strong-bg: rgba(16, 185, 129, 0.10);
+  --tier-strong-border: rgba(16, 185, 129, 0.30);
+  --tier-avg-bg: rgba(245, 158, 11, 0.10);
+  --tier-avg-border: rgba(245, 158, 11, 0.30);
+  --tier-weak-bg: rgba(244, 63, 94, 0.10);
+  --tier-weak-border: rgba(244, 63, 94, 0.30);
+  --tier-muted: #71717A;
+  --tier-muted-bg: rgba(113, 113, 122, 0.10);
+  --tier-muted-border: rgba(113, 113, 122, 0.28);
+
+  --green-dim: rgba(16, 185, 129, 0.10);
+  --red-dim: rgba(244, 63, 94, 0.10);
+  --blue-dim: rgba(59, 130, 246, 0.10);
+  --purple-dim: rgba(124, 58, 237, 0.10);
+
+  --sidebar-bg: linear-gradient(180deg, #1B1F28 0%, #171A22 60%, #12141B 100%);
+  --sidebar-bg-mobile: linear-gradient(180deg, #1B1F28 0%, #12141B 100%);
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-text-primary: #F5F5F7;
+  --sidebar-text-secondary: rgba(245, 245, 247, 0.72);
+  --sidebar-text-muted: rgba(245, 245, 247, 0.46);
+  --sidebar-surface: rgba(255, 255, 255, 0.05);
+  --sidebar-item-active-bg: linear-gradient(90deg, rgba(96,165,250,0.18) 0%, rgba(96,165,250,0.04) 100%);
+  --sidebar-accent: #60A5FA;
+  --sidebar-accent-border: rgba(96, 165, 250, 0.36);
 }
 
 * {

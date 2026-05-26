@@ -20,15 +20,15 @@ export default function MobileNav() {
     <nav
       className="fixed bottom-0 left-0 right-0 flex md:hidden z-50"
       style={{
-        background: 'linear-gradient(180deg, #0B0B0F 0%, #0E0E13 100%)',
-        borderTop: '1px solid var(--border-color)',
+        background: 'var(--sidebar-bg-mobile)',
+        borderTop: '1px solid var(--sidebar-border)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = pathname === item.href;
-        const color = isActive ? 'var(--blue)' : item.highlight ? 'var(--yellow)' : 'var(--text-muted)';
+        const color = isActive ? 'var(--sidebar-accent)' : item.highlight ? 'var(--yellow)' : 'var(--sidebar-text-muted)';
         return (
           <Link
             key={item.href}
