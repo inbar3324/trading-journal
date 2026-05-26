@@ -1,6 +1,6 @@
 'use client';
 
-import { Settings, Image as ImageIcon } from 'lucide-react';
+import { Settings, Image as ImageIcon, X } from 'lucide-react';
 import type { NotionPage, NotionDbSchema } from '@/lib/notion-page';
 import { TEXT_SCALES, IMAGE_SCALES, stepScale, type NotebookPalette } from './notebookConfig';
 
@@ -15,6 +15,8 @@ interface Props {
   onTextScale: (next: number) => void;
   onImageScale: (next: number) => void;
   onOpenSetup: () => void;
+  isMobile?: boolean;
+  onCloseDrawer?: () => void;
 }
 
 function formatDateShort(iso: string): string {
@@ -59,6 +61,7 @@ function entryLabel(page: NotionPage, schema: NotionDbSchema): { primary: string
 export function NotebookSidebar({
   pages, schema, palette, selectedId, onSelect,
   textScale, imageScale, onTextScale, onImageScale, onOpenSetup,
+  isMobile, onCloseDrawer,
 }: Props) {
   const btn: React.CSSProperties = {
     width: 26, height: 26, borderRadius: 4,
@@ -76,8 +79,10 @@ export function NotebookSidebar({
 
   return (
     <div style={{
-      width: 280, flexShrink: 0,
-      borderRight: `1px solid ${palette.border}`,
+      width: isMobile ? '100%' : 280,
+      height: isMobile ? '100%' : undefined,
+      flexShrink: 0,
+      borderRight: isMobile ? 'none' : `1px solid ${palette.border}`,
       background: palette.sidebarBg,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
@@ -91,6 +96,12 @@ export function NotebookSidebar({
           style={btn}>
           <Settings size={13} />
         </button>
+
+        {isMobile && onCloseDrawer && (
+          <button onClick={onCloseDrawer} title="Close" style={{ ...btn, marginLeft: 'auto' }}>
+            <X size={13} />
+          </button>
+        )}
 
         <div style={{ display: 'inline-flex', gap: 0, marginLeft: 4 }}>
           <button onClick={() => onTextScale(stepScale(textScale, TEXT_SCALES, -1))}

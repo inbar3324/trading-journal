@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { NotionPage, NotionDbSchema } from '@/lib/notion-page';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Menu } from 'lucide-react';
 import {
   type NotebookConfig, DEFAULT_CONFIG,
   getNotebookConfig, saveNotebookConfig, getPalette,
@@ -38,11 +38,25 @@ function sortPagesByDate(pages: NotionPage[], schema: NotionDbSchema): NotionPag
   return [...dated, ...undated];
 }
 
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return isMobile;
+}
+
 export function NotebookView({ pages, schema, dbId }: Props) {
   const [config, setConfig] = useState<NotebookConfig | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingSetup, setEditingSetup] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!dbId) return;
@@ -104,28 +118,75 @@ export function NotebookView({ pages, schema, dbId }: Props) {
 
   const toggleTheme = () => updateConfig({ theme: config.theme === 'light' ? 'dark' : 'light' });
 
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    if (isMobile) setDrawerOpen(false);
+  };
+
+  const sidebarMobileStyle: React.CSSProperties = isMobile ? {
+    position: 'fixed',
+    top: 0, bottom: 0, left: 0,
+    width: 'min(86vw, 320px)',
+    zIndex: 1100,
+    transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+    transition: 'transform 220ms ease',
+    boxShadow: drawerOpen ? '0 12px 40px rgba(0,0,0,0.4)' : 'none',
+  } : {};
+
   return (
-    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, background: palette.bg }}>
-      <NotebookSidebar
-        pages={sortedPages}
-        schema={schema}
-        palette={palette}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        textScale={config.textScale}
-        imageScale={config.imageScale}
-        onTextScale={(v) => updateConfig({ textScale: v })}
-        onImageScale={(v) => updateConfig({ imageScale: v })}
-        onOpenSetup={() => setEditingSetup(true)}
-      />
-      <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-        {/* Theme toggle — top right */}
+    <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, background: palette.bg, position: 'relative' }}>
+      <div style={sidebarMobileStyle}>
+        <NotebookSidebar
+          pages={sortedPages}
+          schema={schema}
+          palette={palette}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          textScale={config.textScale}
+          imageScale={config.imageScale}
+          onTextScale={(v) => updateConfig({ textScale: v })}
+          onImageScale={(v) => updateConfig({ imageScale: v })}
+          onOpenSetup={() => setEditingSetup(true)}
+          isMobile={isMobile}
+          onCloseDrawer={() => setDrawerOpen(false)}
+        />
+      </div>
+
+      {isMobile && drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
+        />
+      )}
+
+      <div style={{ flex: 1, overflow: 'auto', position: 'relative', width: '100%' }}>
+        {isMobile && (
+          <button
+            onClick={() => setDrawerOpen(true)}
+            title="Entries"
+            style={{
+              position: 'absolute', top: 12, left: 12, zIndex: 10,
+              width: 34, height: 34, borderRadius: 6,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: palette.controlBg,
+              border: `1px solid ${palette.border}`,
+              color: palette.textSecondary,
+              cursor: 'pointer',
+            }}
+          >
+            <Menu size={16} />
+          </button>
+        )}
+
         <button
           onClick={toggleTheme}
           title={config.theme === 'light' ? 'Switch to dark' : 'Switch to white'}
           style={{
-            position: 'absolute', top: 16, right: 20, zIndex: 10,
-            width: 30, height: 30, borderRadius: 6,
+            position: 'absolute',
+            top: isMobile ? 12 : 16,
+            right: isMobile ? 12 : 20,
+            zIndex: 10,
+            width: isMobile ? 34 : 30, height: isMobile ? 34 : 30, borderRadius: 6,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             background: palette.controlBg,
             border: `1px solid ${palette.border}`,
@@ -138,7 +199,11 @@ export function NotebookView({ pages, schema, dbId }: Props) {
         </button>
 
         {selectedPage ? (
-          <div style={{ maxWidth: 820, margin: '0 auto', padding: '48px 56px' }}>
+          <div style={{
+            maxWidth: 820,
+            margin: '0 auto',
+            padding: isMobile ? '58px 14px 24px' : '48px 56px',
+          }}>
             <NotebookEntry
               page={selectedPage}
               schema={schema}

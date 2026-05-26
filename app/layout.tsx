@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
@@ -9,6 +9,14 @@ import NotionConfigProvider from '@/components/providers/NotionConfigProvider';
 export const metadata: Metadata = {
   title: 'Trading Journal 2026',
   description: 'ICT Trading Analytics Dashboard',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+  themeColor: '#131316',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
