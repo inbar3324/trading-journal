@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RefreshCw, Table as TableIcon, Calendar, LayoutGrid, BarChart3, ChevronDown, X, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, Table as TableIcon, Calendar, LayoutGrid, BarChart3, BookOpen, ChevronDown, X, Trash2 } from 'lucide-react';
 import type { NotionPage, NotionDbSchema, NotionPropDef, NotionPropValue } from '@/lib/notion-page';
 import { getNotionConfig, saveNotionConfig, notionHeaders } from '@/lib/notion-config';
 import { EditableCell } from '@/components/journal/v2/EditableCell';
 import { colWidth } from '@/components/journal/v2/widths';
+import { NotebookView } from '@/components/journal/notebook/NotebookView';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,9 +43,10 @@ function emptyPage(schema: NotionDbSchema): Record<string, NotionPropValue> {
   return out;
 }
 
-// ── View tabs (decorative — only Table works) ────────────────────────────────
+// ── View tabs ─────────────────────────────────────────────────────────────────
 const VIEW_TABS = [
   { id: 'table',    label: 'Table',     icon: TableIcon },
+  { id: 'notebook', label: 'Notebook',  icon: BookOpen },
   { id: 'calendar', label: 'Calendar',  icon: Calendar },
   { id: 'gallery',  label: 'Gallery',   icon: LayoutGrid },
   { id: 'stats',    label: 'statistic', icon: BarChart3 },
@@ -297,7 +299,9 @@ export default function JournalPage() {
         </div>
       </div>
 
-      {activeView !== 'table' ? (
+      {activeView === 'notebook' ? (
+        <NotebookView pages={pages} schema={schema} dbId={realDbId ?? schema.realDbId ?? ''} />
+      ) : activeView !== 'table' ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
           {VIEW_TABS.find(v => v.id === activeView)?.label} view — coming soon
         </div>

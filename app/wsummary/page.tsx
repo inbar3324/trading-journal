@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Table as TableIcon, BookOpen } from 'lucide-react';
 import type { NotionPropDef, NotionPropValue, SelectOption } from '@/lib/notion-page';
 import { EditableCell } from '@/components/journal/v2/EditableCell';
 import { colWidth } from '@/components/journal/v2/widths';
 import { TypeSelector } from '@/components/weekly/TypeSelector';
 import type { WColumn, WRow, WStore, WColType } from '@/lib/weekly-types';
+import { NotebookView } from '@/components/journal/notebook/NotebookView';
+import { wstoreToNotebook } from '@/components/journal/notebook/wstoreAdapter';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 import {
   pullDb, patchDbSchema, createPage as apiCreatePage,
@@ -168,6 +170,7 @@ export default function WeeklySummaryPage() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error' | 'offline'>('offline');
   const [syncError, setSyncError] = useState('');
   const [settingsModal, setSettingsModal] = useState(false);
+  const [activeView, setActiveView] = useState<'table' | 'notebook'>('table');
 
   const storeRef = useRef<WStore | null>(null);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -644,6 +647,10 @@ export default function WeeklySummaryPage() {
   const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 44 + 28;
   const isConnected = !!store.notion;
 
+  // ── Notebook adapter (memoized would be nice but cheap to recompute) ───────
+  const notebookData = wstoreToNotebook(store);
+  const notebookDbId = `wsummary_${store.notion?.dbId ?? 'local'}`;
+
   // ── Sync indicator ──────────────────────────────────────────────────────────
   const indicator = (() => {
     if (syncStatus === 'offline') return null;
@@ -750,6 +757,38 @@ export default function WeeklySummaryPage() {
         </div>
       )}
 
+      {/* View tabs */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border-color)', marginBottom: 16 }}>
+        {([
+          { id: 'table' as const, label: 'Table', icon: TableIcon },
+          { id: 'notebook' as const, label: 'Notebook', icon: BookOpen },
+        ]).map(tab => {
+          const Icon = tab.icon;
+          const active = activeView === tab.id;
+          return (
+            <button key={tab.id} onClick={() => setActiveView(tab.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '7px 10px', background: 'transparent', border: 'none',
+                cursor: 'pointer', fontSize: 13,
+                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontWeight: active ? 600 : 400,
+                borderBottom: active ? '2px solid var(--text-primary)' : '2px solid transparent',
+                marginBottom: -1,
+              }}>
+              <Icon size={14} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeView === 'notebook' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 220px)', minHeight: 500, border: '1px solid var(--border-color)', borderRadius: 10, overflow: 'hidden' }}>
+          <NotebookView pages={notebookData.pages} schema={notebookData.schema} dbId={notebookDbId} />
+        </div>
+      ) : (
+      <>
       {/* Table */}
       <div className="journal-scroll" style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 10 }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: minW }}>
@@ -893,6 +932,8 @@ export default function WeeklySummaryPage() {
           </tbody>
         </table>
       </div>
+      </>
+      )}
 
       {/* Settings modal (when connected) */}
       {settingsModal && store.notion && (
