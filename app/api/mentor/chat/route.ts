@@ -1,0 +1,243 @@
+import type { Trade } from '@/lib/types';
+import { getAllTrades } from '@/lib/notion';
+import { getDateRangeBounds, toISODate, type DateRange } from '@/lib/utils';
+import { MENTOR_SYSTEM_PROMPT } from '@/lib/mentor-knowledge';
+import {
+  buildJournalContext, scopeTrades, journalDateBounds, rawNotesBlock,
+  type RouterDecision,
+} from '@/lib/mentor-context';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
+const MODEL = 'gemini-2.5-flash';
+
+interface ChatMessage { role: 'user' | 'model'; content: string }
+
+function mentorKeys(): string[] {
+  return [process.env.MENTOR_GEMINI_KEY, process.env.MENTOR_GEMINI_KEY_2]
+    .filter((k): k is string => !!k?.startsWith('AIza'));
+}
+
+// ── Pass 1: deterministic router — does the question need the journal, at what scope? ──
+// Heuristic over the Hebrew text: predictable, instant, free. Matches the user's intent:
+// general personal question → whole journal; period-specific → that period only; pure
+// knowledge / mental / external question → no journal context (no wasted tokens).
+function routeQuestion(question: string): RouterDecision {
+  const q = question;
+
+  // Personal / journal signals — references to the trader's own data, not generic terms.
+  const personal = /שלי|אצלי|היומן|יומן שלי|סחרתי|נכנסתי|יצאתי|הרווחתי|הפסדתי|ביצועים|התקדמות|הסטטיסטיק|הטעות|הטעויות|הדפוס|הדפוסים|כמה עסקאות|כמה ימים|כמה הרווח|כמה הפסד|win rate/i;
+  if (!personal.test(q)) return { needsJournal: false, scope: 'all' };
+
+  // "two months / two weeks" — must precede the single-month/week rules (substring overlap:
+  // "החודשיים" contains "החודש", "השבועיים" contains "השבוע").
+  if (/חודשיים|שני חודשים|2 חודשים/i.test(q)) {
+    const d = new Date(); d.setMonth(d.getMonth() - 2);
+    return { needsJournal: true, scope: 'range', startDate: toISODate(d), endDate: toISODate(new Date()) };
+  }
+  if (/שבועיים|שני שבועות|2 שבועות/i.test(q)) {
+    const d = new Date(); d.setDate(d.getDate() - 14);
+    return { needsJournal: true, scope: 'range', startDate: toISODate(d), endDate: toISODate(new Date()) };
+  }
+
+  // Period detection → scope=range with computed bounds.
+  const periodToRange: Array<[RegExp, DateRange]> = [
+    [/חודש שעבר|החודש שעבר|חודש קודם/i, 'last_month'],
+    [/שבוע שעבר|השבוע שעבר|שבוע קודם/i, 'last_week'],
+    [/3 חודשים|שלושה חודשים|רבעון/i, '3_months'],
+    [/החודש|החודש הזה/i, 'this_month'],
+    [/השבוע|השבוע הזה/i, 'this_week'],
+    [/השנה|השנה הזו|מתחילת השנה/i, 'this_year'],
+    [/היום/i, 'today'],
+  ];
+  for (const [re, range] of periodToRange) {
+    if (re.test(q)) {
+      const [startDate, endDate] = getDateRangeBounds(range);
+      return { needsJournal: true, scope: 'range', startDate, endDate };
+    }
+  }
+
+  // Explicit ISO date or date range in the text.
+  const isoDates = q.match(/\d{4}-\d{2}-\d{2}/g);
+  if (isoDates && isoDates.length >= 1) {
+    const sorted = [...isoDates].sort();
+    return { needsJournal: true, scope: 'range', startDate: sorted[0], endDate: sorted[sorted.length - 1] };
+  }
+
+  // "yesterday".
+  if (/אתמול/i.test(q)) {
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const d = toISODate(y);
+    return { needsJournal: true, scope: 'range', startDate: d, endDate: d };
+  }
+
+  // Fuzzy "recently / last trades" → recent.
+  if (/לאחרונה|אחרונ|לאחרו|הזמן האחרון/i.test(q)) {
+    return { needsJournal: true, scope: 'recent' };
+  }
+
+  // General personal question with no period → whole journal.
+  return { needsJournal: true, scope: 'all' };
+}
+
+// ── Paraphrase pass: turn raw journal notes into neutral third-person insights. ──
+// The answer model never sees the raw notes, so it cannot quote the trader verbatim.
+async function paraphraseNotes(rawNotes: string, keys: string[]): Promise<string> {
+  const prompt = `אתה אנליסט מסחר. לפניך הערות יומן גולמיות שכתב סוחר (בגוף ראשון).
+המשימה: לזקק אותן לתובנות התנהגותיות, מנוסחות מחדש לחלוטין במילים שלך.
+חוקים קשיחים:
+- בגוף שלישי או פנייה כללית, בלי שום ציטוט מילולי, בלי מרכאות, בלי תאריכים, בלי להעתיק משפטים.
+- 5 עד 9 תובנות קצרות. כלול גם חוזקות וגם בעיות/דפוסים חוזרים.
+- כל תובנה = שורה אחת שמתחילה ב-"- ".
+- אם דבר חוזר על עצמו בכמה הערות — ציין שזה דפוס חוזר.
+
+הערות הסוחר:
+${rawNotes}`;
+
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 700, temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
+  });
+
+  for (const key of keys) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body },
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (text.trim()) return text.trim();
+    } catch { /* try next key */ }
+  }
+  return '';
+}
+
+export async function POST(request: Request) {
+  let messages: ChatMessage[] = [];
+  try {
+    const body = await request.json();
+    messages = Array.isArray(body.messages) ? body.messages : [];
+  } catch {
+    return Response.json({ error: 'שגיאה בקריאת הנתונים' }, { status: 400 });
+  }
+
+  const keys = mentorKeys();
+  if (keys.length === 0) {
+    return Response.json({ error: 'מפתחות Gemini של המנטור לא מוגדרים' }, { status: 500 });
+  }
+
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (!lastUser?.content?.trim()) {
+    return Response.json({ error: 'אין שאלה' }, { status: 400 });
+  }
+
+  // ── Build journal context (only when the router says it's needed) ──
+  const notionKey = request.headers.get('x-notion-key') ?? undefined;
+  const dbId = request.headers.get('x-notion-db') ?? undefined;
+
+  let journalContext = '';
+  if (notionKey) {
+    try {
+      const decision = routeQuestion(lastUser.content);
+      if (decision.needsJournal) {
+        const { trades } = await getAllTrades({ key: notionKey, dbId });
+        if (journalDateBounds(trades).count > 0) {
+          const scoped = scopeTrades(trades as Trade[], decision);
+          const rawNotes = rawNotesBlock(scoped);
+          const notesInsights = rawNotes ? await paraphraseNotes(rawNotes, keys) : '';
+          journalContext = buildJournalContext(scoped, decision, notesInsights);
+        }
+      }
+    } catch (e) {
+      console.error('mentor journal fetch failed:', e instanceof Error ? e.message : e);
+    }
+  }
+
+  // ── Build multi-turn contents; inject journal context into the last user turn ──
+  const contents = messages
+    .filter((m) => m.content?.trim())
+    .map((m) => ({ role: m.role, parts: [{ text: m.content }] }));
+
+  if (journalContext) {
+    for (let i = contents.length - 1; i >= 0; i--) {
+      if (contents[i].role === 'user') {
+        const original = contents[i].parts[0].text;
+        contents[i] = {
+          role: 'user',
+          parts: [{
+            text: `הוראה מחייבת: הטקסט שבין הקווים הוא רקע פרטי מהיומן. אסור לצטט ממנו מילולית — לא משפטים, לא תגיות באנגלית, לא תאריכים, לא מרכאות עם טקסט שהסוחר כתב. נסח כל תובנה מחדש לגמרי במילים שלך.
+━━━ רקע (אל תצטט) ━━━
+${journalContext}
+━━━ סוף הרקע — אפס ציטוטים, הכל במילים שלך ━━━
+
+שאלת הסוחר:
+${original}`,
+          }],
+        };
+        break;
+      }
+    }
+  }
+
+  // ── Pass 2: stream the mentor answer, with Google Search grounding ──
+  const answerBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: MENTOR_SYSTEM_PROMPT }] },
+    contents,
+    tools: [{ google_search: {} }],
+    generationConfig: { maxOutputTokens: 1800, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } },
+  });
+
+  let geminiRes: Response | null = null;
+  for (const key of keys) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?key=${key}&alt=sse`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: answerBody },
+      );
+      if (res.ok && res.body) { geminiRes = res; break; }
+    } catch { /* try next key */ }
+  }
+
+  if (!geminiRes) {
+    return Response.json({ error: 'כל מפתחות ה-AI נכשלו. נסה שוב בעוד רגע.' }, { status: 502 });
+  }
+
+  const reader = geminiRes.body!.getReader();
+  const decoder = new TextDecoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      let buffer = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const json = line.slice(6).trim();
+            if (!json || json === '[DONE]') continue;
+            try {
+              const chunk = JSON.parse(json);
+              const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+              for (const p of parts) {
+                if (p.thought) continue; // never stream the model's internal thinking
+                if (p.text) controller.enqueue(new TextEncoder().encode(p.text));
+              }
+            } catch { /* skip malformed chunk */ }
+          }
+        }
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' },
+  });
+}

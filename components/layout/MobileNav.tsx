@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BarChart2, CalendarDays, BookOpen, Table2, Smartphone } from 'lucide-react';
+import { LayoutDashboard, BarChart2, CalendarDays, BookOpen, Table2, Smartphone, Sparkles } from 'lucide-react';
 
 const navItems = [
   { href: '/', icon: LayoutDashboard, label: 'Home' },
@@ -10,6 +10,7 @@ const navItems = [
   { href: '/analytics', icon: BarChart2, label: 'Analytics' },
   { href: '/weekly', icon: CalendarDays, label: 'Recap' },
   { href: '/wsummary', icon: Table2, label: 'Summary' },
+  { href: '/mentor', icon: Sparkles, label: 'Mentor' },
   { href: '/install', icon: Smartphone, label: 'הורד', highlight: true },
 ];
 
