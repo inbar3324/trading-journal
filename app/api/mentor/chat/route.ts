@@ -27,29 +27,30 @@ function routeQuestion(question: string): RouterDecision {
   const q = question;
 
   // Personal / journal signals — references to the trader's own data, not generic terms.
-  const personal = /שלי|אצלי|היומן|יומן שלי|סחרתי|נכנסתי|יצאתי|הרווחתי|הפסדתי|ביצועים|התקדמות|הסטטיסטיק|הטעות|הטעויות|הדפוס|הדפוסים|כמה עסקאות|כמה ימים|כמה הרווח|כמה הפסד|win rate/i;
+  // Hebrew + English.
+  const personal = /שלי|אצלי|היומן|יומן שלי|סחרתי|נכנסתי|יצאתי|הרווחתי|הפסדתי|ביצועים|התקדמ|שיפור|השתפר|הסטטיסטיק|הטעות|הטעויות|הדפוס|הדפוסים|כמה עסקאות|כמה ימים|כמה הרווח|כמה הפסד|win[- ]?rate|\bmy (?:\w+ ){0,2}(trade|trades|trading|mistake|mistakes|journal|performance|results?|stats?|losses?|pnl|setups?|patterns?|entr(?:y|ies)|wins?)\b|\bhow am i\b|\bimprov(?:e|ing|ement)\b|\bprogress\b|\b(?:do|did|was|have) i\b[^?.!]{0,40}\b(?:trade|win|los|profit|mistake|pattern|improv|better|worse|wrong|right|consistent|enter|exit|setup|pnl|journal)\w*/i;
   if (!personal.test(q)) return { needsJournal: false, scope: 'all' };
 
   // "two months / two weeks" — must precede the single-month/week rules (substring overlap:
   // "החודשיים" contains "החודש", "השבועיים" contains "השבוע").
-  if (/חודשיים|שני חודשים|2 חודשים/i.test(q)) {
+  if (/חודשיים|שני חודשים|2 חודשים|last two months|past two months|last 2 months|past 2 months|two months|2 months/i.test(q)) {
     const d = new Date(); d.setMonth(d.getMonth() - 2);
     return { needsJournal: true, scope: 'range', startDate: toISODate(d), endDate: toISODate(new Date()) };
   }
-  if (/שבועיים|שני שבועות|2 שבועות/i.test(q)) {
+  if (/שבועיים|שני שבועות|2 שבועות|last two weeks|past two weeks|two weeks|last 2 weeks|past 2 weeks|2 weeks/i.test(q)) {
     const d = new Date(); d.setDate(d.getDate() - 14);
     return { needsJournal: true, scope: 'range', startDate: toISODate(d), endDate: toISODate(new Date()) };
   }
 
-  // Period detection → scope=range with computed bounds.
+  // Period detection → scope=range with computed bounds. Hebrew + English.
   const periodToRange: Array<[RegExp, DateRange]> = [
-    [/חודש שעבר|החודש שעבר|חודש קודם/i, 'last_month'],
-    [/שבוע שעבר|השבוע שעבר|שבוע קודם/i, 'last_week'],
-    [/3 חודשים|שלושה חודשים|רבעון/i, '3_months'],
-    [/החודש|החודש הזה/i, 'this_month'],
-    [/השבוע|השבוע הזה/i, 'this_week'],
-    [/השנה|השנה הזו|מתחילת השנה/i, 'this_year'],
-    [/היום/i, 'today'],
+    [/חודש שעבר|החודש שעבר|חודש קודם|last month|past month|previous month/i, 'last_month'],
+    [/שבוע שעבר|השבוע שעבר|שבוע קודם|last week|past week|previous week/i, 'last_week'],
+    [/3 חודשים|שלושה חודשים|רבעון|3 months|three months|last 3 months|past 3 months|last quarter|quarter/i, '3_months'],
+    [/החודש|החודש הזה|this month|current month/i, 'this_month'],
+    [/השבוע|השבוע הזה|this week|current week/i, 'this_week'],
+    [/השנה|השנה הזו|מתחילת השנה|this year|year to date|ytd/i, 'this_year'],
+    [/היום|today/i, 'today'],
   ];
   for (const [re, range] of periodToRange) {
     if (re.test(q)) {
@@ -66,14 +67,14 @@ function routeQuestion(question: string): RouterDecision {
   }
 
   // "yesterday".
-  if (/אתמול/i.test(q)) {
+  if (/אתמול|yesterday/i.test(q)) {
     const y = new Date(); y.setDate(y.getDate() - 1);
     const d = toISODate(y);
     return { needsJournal: true, scope: 'range', startDate: d, endDate: d };
   }
 
   // Fuzzy "recently / last trades" → recent.
-  if (/לאחרונה|אחרונ|לאחרו|הזמן האחרון/i.test(q)) {
+  if (/לאחרונה|אחרונ|לאחרו|הזמן האחרון|recently|lately|recent|last few|past few/i.test(q)) {
     return { needsJournal: true, scope: 'recent' };
   }
 
