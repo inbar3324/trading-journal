@@ -85,20 +85,21 @@ function routeQuestion(question: string): RouterDecision {
 // ── Paraphrase pass: turn raw journal notes into neutral third-person insights. ──
 // The answer model never sees the raw notes, so it cannot quote the trader verbatim.
 async function paraphraseNotes(rawNotes: string, keys: string[]): Promise<string> {
-  const prompt = `אתה אנליסט מסחר. לפניך הערות יומן גולמיות שכתב סוחר (בגוף ראשון).
-המשימה: לזקק אותן לתובנות התנהגותיות, מנוסחות מחדש לחלוטין במילים שלך.
+  const prompt = `אתה אנליסט מסחר. לפניך הערות יומן גולמיות שכתב סוחר (בגוף ראשון). זהו המקור הכי חשוב להבנת הסוחר.
+המשימה: לזקק את **כל** מה שעולה מהן לתובנות, באופן יסודי — אל תפספס שום נושא שחוזר או שמשמעותי.
 חוקים קשיחים:
 - בגוף שלישי או פנייה כללית, בלי שום ציטוט מילולי, בלי מרכאות, בלי תאריכים, בלי להעתיק משפטים.
-- 5 עד 9 תובנות קצרות. כלול גם חוזקות וגם בעיות/דפוסים חוזרים.
-- כל תובנה = שורה אחת שמתחילה ב-"- ".
-- אם דבר חוזר על עצמו בכמה הערות — ציין שזה דפוס חוזר.
+- כסה הכל: דפוסים התנהגותיים, רגשות, סיבות לכניסה/יציאה, מה תכנן מול מה שעשה בפועל, טעויות חוזרות, וגם חוזקות והתקדמות.
+- 7 עד 12 תובנות קצרות, ממוקדות. כל תובנה = שורה אחת שמתחילה ב-"- ".
+- אם דבר חוזר בכמה הערות — סמן אותו כדפוס חוזר וציין כמה פעמים בערך.
+- שמור על הניואנסים והטון של הסוחר (ביטחון, תסכול, היסוס) — הם חשובים לניתוח.
 
 הערות הסוחר:
 ${rawNotes}`;
 
   const body = JSON.stringify({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 700, temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: { maxOutputTokens: 1000, temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
   });
 
   for (const key of keys) {

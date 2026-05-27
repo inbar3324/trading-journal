@@ -98,12 +98,16 @@ POI בניצחונות: ${topItems(wins, 'poi')} | POI בהפסדים: ${topItem
     : '';
 
   const insightsBlock = notesInsights.trim()
-    ? `\n\nתובנות מההערות של הסוחר (כבר מנוסחות מחדש — דבר עליהן במילים שלך, אל תצטט):\n${notesInsights.trim()}`
-    : '';
+    ? `★★★ המקור העיקרי — מה שהסוחר כתב בעצמו בטקסט החופשי (מנוסח מחדש). בנה את עיקר התשובה סביב זה, אל תצטט מילולית: ★★★\n${notesInsights.trim()}`
+    : '(אין טקסט חופשי בתקופה זו — הסתמך על הנתונים למטה)';
 
   return `${header}
+
+${insightsBlock}
+
+— — — נתונים תומכים (משניים — רק לאישוש/חידוד מה שעולה מהטקסט) — — —
 ${statsBlock}
 
 עסקאות לפי סדר כרונולוגי (תאריך | תוצאה | PNL | דירוג):
-${tradesBlock}${truncNote}${insightsBlock}`;
+${tradesBlock}${truncNote}`;
 }
