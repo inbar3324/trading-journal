@@ -85,12 +85,13 @@ function routeQuestion(question: string): RouterDecision {
 // ── Paraphrase pass: turn raw journal notes into neutral third-person insights. ──
 // The answer model never sees the raw notes, so it cannot quote the trader verbatim.
 async function paraphraseNotes(rawNotes: string, keys: string[]): Promise<string> {
-  const prompt = `אתה אנליסט מסחר. לפניך הערות יומן גולמיות שכתב סוחר (בגוף ראשון). זהו המקור הכי חשוב להבנת הסוחר.
+  const prompt = `אתה אנליסט מסחר. לפניך הערות יומן גולמיות שכתב סוחר (בגוף ראשון). כל שורה מתחילה בתגית: [עסקה] = יום שבו בוצעה עסקה, [יום צפייה — לא נלקחה עסקה] = יום שבו רק צפה בשוק ולא נכנס לעסקה. זהו המקור הכי חשוב להבנת הסוחר.
 המשימה: לזקק את **כל** מה שעולה מהן לתובנות, באופן יסודי — אל תפספס שום נושא שחוזר או שמשמעותי.
 חוקים קשיחים:
 - בגוף שלישי או פנייה כללית, בלי שום ציטוט מילולי, בלי מרכאות, בלי תאריכים, בלי להעתיק משפטים.
 - כסה הכל: דפוסים התנהגותיים, רגשות, סיבות לכניסה/יציאה, מה תכנן מול מה שעשה בפועל, טעויות חוזרות, וגם חוזקות והתקדמות.
-- 7 עד 12 תובנות קצרות, ממוקדות. כל תובנה = שורה אחת שמתחילה ב-"- ".
+- **התייחס בנפרד גם לימי הצפייה:** האם יש דפוס של היסוס, פספוסי הזדמנויות, חשש להיכנס, או תצפיות חיוביות שלא תורגמו לפעולה? סמן את התובנות הקשורות לימי צפייה במפורש.
+- 6 עד 10 תובנות קצרות וממוקדות (כולל לפחות 1-2 על ימי הצפייה אם יש כאלה). כל תובנה = שורה אחת שמתחילה ב-"- ".
 - אם דבר חוזר בכמה הערות — סמן אותו כדפוס חוזר וציין כמה פעמים בערך.
 - שמור על הניואנסים והטון של הסוחר (ביטחון, תסכול, היסוס) — הם חשובים לניתוח.
 
@@ -189,7 +190,7 @@ ${original}`,
     systemInstruction: { parts: [{ text: MENTOR_SYSTEM_PROMPT }] },
     contents,
     tools: [{ google_search: {} }],
-    generationConfig: { maxOutputTokens: 1800, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } },
+    generationConfig: { maxOutputTokens: 900, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } },
   });
 
   let geminiRes: Response | null = null;
