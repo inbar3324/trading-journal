@@ -521,6 +521,27 @@ export default function WeeklySummaryPage() {
     }
   }
 
+  async function uploadCellFile(rowId: string, colId: string, file: File) {
+    const cur = storeRef.current;
+    if (!cur?.notion) return;
+    const row = cur.rows.find(r => r.id === rowId);
+    const col = cur.columns.find(c => c.id === colId);
+    if (!row?.notionPageId || !col) return;
+    const cfg = getNotionConfig();
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('prop', col.name);
+    const res = await fetch(`/api/notion/pages/${row.notionPageId}/file`, {
+      method: 'POST', headers: notionHeaders(cfg), body: fd,
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const next = (data.page?.properties as Record<string, NotionPropValue> | undefined)?.[col.name];
+    if (next) {
+      upd(s => ({ ...s, rows: s.rows.map(r => r.id === rowId ? { ...r, cells: { ...r.cells, [colId]: next } } : r) }));
+    }
+  }
+
   // ── Connect / disconnect ────────────────────────────────────────────────────
 
   async function loadPages() {
@@ -897,6 +918,7 @@ export default function WeeklySummaryPage() {
                       prop={toPropDef(col)}
                       value={row.cells[col.id] ?? defaultCell(col.type)}
                       onCommit={next => updateCell(row.id, col.id, next)}
+                      onUploadFile={toPropDef(col).type === 'files' ? (f) => uploadCellFile(row.id, col.id, f) : undefined}
                     />
                   </td>
                 ))}
