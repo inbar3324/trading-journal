@@ -15,6 +15,7 @@ export interface RouterDecision {
   scope: JournalScope;
   startDate?: string;
   endDate?: string;
+  analytical?: boolean;
 }
 
 function topItems(trades: Trade[], field: keyof Trade, n = 3): string {
@@ -58,6 +59,17 @@ export function rawNotesBlock(scoped: Trade[]): string {
     .join('\n');
 }
 
+// Raw free-text notes of LOSING executed trades only — input for the loss-categorization
+// pass (analytical questions). Each line is date-tagged so the categorizer can tally by cause.
+export function lossNotesBlock(scoped: Trade[]): string {
+  const anyMarked = scoped.some(isActualTrade);
+  const actual = anyMarked ? scoped.filter(isActualTrade) : scoped;
+  return actual
+    .filter((t) => t.winLose.includes('lose') && t.notes?.trim())
+    .map((t) => `- [${t.date ?? '?'}] ${t.notes!.trim()}`)
+    .join('\n');
+}
+
 // Returns the date range available in the journal (for the router prompt).
 export function journalDateBounds(trades: Trade[]): { first: string; last: string; count: number } {
   const dates = trades.map((t) => t.date).filter(Boolean) as string[];
@@ -89,7 +101,7 @@ export function scopeTrades(all: Trade[], decision: RouterDecision): Trade[] {
 // For large journals (scope=all) it leans on aggregate stats + a capped trade list
 // so we never dump the entire raw journal.
 // `notesInsights` is the server-side paraphrased digest of the raw notes (no verbatim text).
-export function buildJournalContext(scoped: Trade[], decision: RouterDecision, notesInsights = ''): string {
+export function buildJournalContext(scoped: Trade[], decision: RouterDecision, notesInsights = '', lossBreakdown = ''): string {
   if (scoped.length === 0) {
     return 'הקשר יומן: לא נמצאו רשומות בטווח המבוקש.';
   }
@@ -139,6 +151,10 @@ POI בניצחונות: ${topItems(wins, 'poi')} | POI בהפסדים: ${topItem
     ? `★★★ המקור העיקרי — מה שהסוחר כתב בעצמו (גם בימי מסחר וגם בימי צפייה), מנוסח מחדש. בנה את עיקר התשובה סביב זה, אל תצטט מילולית: ★★★\n${notesInsights.trim()}`
     : '(אין טקסט חופשי בתקופה זו — הסתמך על הנתונים למטה)';
 
+  const breakdownSection = lossBreakdown.trim()
+    ? `\n\nפילוח הפסדים לפי סיבה (לחישובי "מה היה אם" — השתמש בזה כדי לחשב תרחישים):\n${lossBreakdown.trim()}`
+    : '';
+
   const watchingSection = anyMarked
     ? `\n\nימי צפייה (תאריך | סטטוס | הערה?) — שים לב לפספוסי הזדמנויות / היסוס / שגרה לא יציבה:\n${watchingBlock}`
     : '';
@@ -151,5 +167,5 @@ ${insightsBlock}
 ${statsBlock}
 
 ${anyMarked ? 'ימי מסחר' : 'רשומות'} (תאריך | תוצאה | PNL | דירוג):
-${tradesBlock}${watchingSection}${truncNote}`;
+${tradesBlock}${breakdownSection}${watchingSection}${truncNote}`;
 }

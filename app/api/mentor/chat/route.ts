@@ -3,7 +3,7 @@ import { getAllTrades } from '@/lib/notion';
 import { getDateRangeBounds, toISODate, type DateRange } from '@/lib/utils';
 import { MENTOR_SYSTEM_PROMPT } from '@/lib/mentor-knowledge';
 import {
-  buildJournalContext, scopeTrades, journalDateBounds, rawNotesBlock,
+  buildJournalContext, scopeTrades, journalDateBounds, rawNotesBlock, lossNotesBlock,
   type RouterDecision,
 } from '@/lib/mentor-context';
 
@@ -24,6 +24,17 @@ function mentorKeys(): string[] {
 // general personal question → whole journal; period-specific → that period only; pure
 // knowledge / mental / external question → no journal context (no wasted tokens).
 function routeQuestion(question: string): RouterDecision {
+  const decision = routeScope(question);
+  // Analytical / "what-if" / calculation request — needs the per-loss cause breakdown so the
+  // mentor can actually compute hypotheticals instead of deflecting. Orthogonal to scope.
+  if (decision.needsJournal) {
+    const analytical = /אם לא הייתי|אם הייתי|מה היה אם|לולא|אילו|בלי ה|כמה הייתי|כמה אחוז|אחוז ניצחון אם|תחשב|חשב לי|מה האחוז|without|excluding|what if|had i not|if i had(?:n'?t)?|would my[^?.!]*(?:win|rate|pnl)|recalculate/i.test(question);
+    if (analytical) decision.analytical = true;
+  }
+  return decision;
+}
+
+function routeScope(question: string): RouterDecision {
   const q = question;
 
   // Personal / journal signals — references to the trader's own data, not generic terms.
@@ -118,6 +129,54 @@ ${rawNotes}`;
   return '';
 }
 
+// ── Loss-categorization pass (analytical questions only) ──
+// Tags each losing trade by cause from a fixed taxonomy and returns a per-cause tally,
+// so the answer model can compute "what-if" scenarios (e.g. win rate without stop-placement
+// losses) deterministically. Server-side only; emits counts, never verbatim note text.
+async function categorizeLosses(lossNotes: string, keys: string[]): Promise<string> {
+  const prompt = `אתה אנליסט מסחר. לפניך הערות יומן של עסקאות מפסידות (כל שורה = הפסד אחד, מתוארך).
+המשימה: סווג כל הפסד לסיבה אחת או יותר מתוך הרשימה הקבועה הזו בלבד:
+- מיקום סטופ שגוי (צמוד מדי / הוזז)
+- כניסת FOMO / כניסה מאוחרת אחרי שהאזור עבר
+- עסקה נגד המגמה הראשית
+- מסחר בזמן חדשות מאקרו
+- כניסה מוקדמת לפני אישור
+- יציאה מוקדמת / סטופ-אאוט מעסקה טובה
+- גודל פוזיציה / נקמה / החלטה רגשית
+- בלי סטאפ ברור / מסחר משעמום
+- אחר
+
+החזר אך ורק טבלת סיכום בפורמט הזה (בלי ציטוט מילולי, בלי תאריכים, בלי משפטים מההערות):
+מתוך N הפסדים:
+- <סיבה>: ~<מספר>
+- <סיבה>: ~<מספר>
+(סיווג מבוסס-טקסט; הפסד יכול להשתייך ליותר מסיבה אחת)
+
+כלול רק סיבות עם לפחות הפסד אחד. N = מספר ההפסדים הכולל.
+
+הערות ההפסדים:
+${lossNotes}`;
+
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 500, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+  });
+
+  for (const key of keys) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body },
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      if (text.trim()) return text.trim();
+    } catch { /* try next key */ }
+  }
+  return '';
+}
+
 export async function POST(request: Request) {
   let messages: ChatMessage[] = [];
   try {
@@ -151,7 +210,12 @@ export async function POST(request: Request) {
           const scoped = scopeTrades(trades as Trade[], decision);
           const rawNotes = rawNotesBlock(scoped);
           const notesInsights = rawNotes ? await paraphraseNotes(rawNotes, keys) : '';
-          journalContext = buildJournalContext(scoped, decision, notesInsights);
+          let lossBreakdown = '';
+          if (decision.analytical) {
+            const lossNotes = lossNotesBlock(scoped);
+            if (lossNotes) lossBreakdown = await categorizeLosses(lossNotes, keys);
+          }
+          journalContext = buildJournalContext(scoped, decision, notesInsights, lossBreakdown);
         }
       }
     } catch (e) {
