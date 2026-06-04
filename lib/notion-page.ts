@@ -365,6 +365,10 @@ export async function getDbSchema(creds?: { key?: string; dbId?: string; realDbI
 
   if (!schema) return { title: '', realDbId: dataSourceId, properties: [] };
 
+  // Hide the helper "created_time" property used only to drive the Notion view sort
+  // (added so the Notion table orders 1:1 with the site, which sorts by page createdTime).
+  schema = { ...schema, properties: schema.properties.filter(p => p.type !== 'created_time') };
+
   // Apply Notion column order from the default table view.
   // views.list returns only partial {id} stubs — retrieve each individually.
   try {
