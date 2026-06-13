@@ -192,7 +192,10 @@ export default function WeeklyPage() {
   async function runSummary(trades: Trade[], all: Trade[], rangeOverride: DateRange = 'last_week') {
     const [start, end] = getDateRangeBounds(rangeOverride);
     const journal = all.filter((t) => t.date && start && end && t.date >= start && t.date <= end);
-    await callSummary({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes });
+    const historicalTrades = getActualTrades(all)
+      .filter((t) => t.date && start && t.date < start)
+      .slice(-15);
+    await callSummary({ trades, journalEntries: journal, weekStart: start, weekEnd: end, freeNotes, historicalTrades });
   }
 
   async function generateEmptyPeriodSummary() {
@@ -216,7 +219,10 @@ export default function WeeklyPage() {
     const journal = allTrades.filter(
       (t) => t.date && periodStart && periodEnd && t.date >= periodStart && t.date <= periodEnd,
     );
-    await callSummary({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd, freeNotes });
+    const historicalTrades = getActualTrades(allTrades)
+      .filter((t) => t.date && periodStart && t.date < periodStart)
+      .slice(-15);
+    await callSummary({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd, freeNotes, historicalTrades });
   }
 
   if (loading) {

@@ -320,6 +320,21 @@ export function generateStatsSummary(trades: Trade[], weekStart: string, weekEnd
     s += ` ${wins.length} ניצחונות, ${losses.length} הפסדים${bes.length ? ` ו-${bes.length} BE` : ''}.`;
   }
 
+  // Section "מה עשית טוב" — evidence-based strengths from computed stats only
+  const aRatedWins = wins.filter((t) => t.rateTrade.some((r) => r?.startsWith('A'))).length;
+  const strengths: string[] = [];
+  if (totalPnl > 0) strengths.push(`סגרת את התקופה בירוק עם PNL של **${pnlStr}**`);
+  if (winRate >= 50 && denom > 0) strengths.push(`שמרת על אחוז ניצחון של ${winRate}%`);
+  if (aRatedWins > 0) strengths.push(`${aRatedWins} מהניצחונות הגיעו מסטאפים מדורגים A — בחירת סטאפ איכותית`);
+  if (wins.length > 0) {
+    const best = Math.max(...wins.map((t) => t.pnl ?? 0));
+    if (best > 0) strengths.push(`העסקה הטובה ביותר הניבה **+$${best.toFixed(2)}**`);
+  }
+  s += `\n\n## מה עשית טוב\n`;
+  s += strengths.length > 0
+    ? `${strengths.join('. ')}. לזיהוי שיפור לעומת תקופות קודמות לחץ "צור סיכום" לניתוח AI מלא.`
+    : 'התקופה הייתה מאתגרת — לחץ "צור סיכום" לזיהוי נקודות חוזק ושיפור לעומת תקופות קודמות.';
+
   // Notes pattern — find repeated themes in notes text only
   const allNotes = trades.map((t) => t.notes ?? '').filter(Boolean).join(' ');
   const noteKeywords: Array<{ pattern: RegExp; label: string; rule: string }> = [

@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
     if (apiKeys.length === 0) {
       return Response.json({
-        summary: `## מה קרה\nלא בוצעו עסקאות בתקופה ${weekStart} עד ${weekEnd}.\n\n## דפוס אפשרי\nאין מספיק נתונים לניתוח אוטומטי.\n\n## המלצה\nהוסף הערות ולחץ Generate לניתוח מעמיק.`,
+        summary: `## מה קרה\nלא בוצעו עסקאות בתקופה ${weekStart} עד ${weekEnd}.\n\n## מה עשית טוב\nאין מספיק נתונים — הוסף הערות ולחץ Generate.\n\n## דפוס אפשרי\nאין מספיק נתונים לניתוח אוטומטי.\n\n## המלצה\nהוסף הערות ולחץ Generate לניתוח מעמיק.`,
         source: 'stats',
       });
     }
@@ -100,7 +100,10 @@ ${historyBlock}
 תאר את ימי ההיעדר — מה עולה מהיומן, מהסיבות שנבחרו, ומההקשר ההיסטורי.
 
 ## מה עשית טוב
-האם בהיעדרות הזו יש משמעת חיובית? למשל הימנעות ממסחר בתנאי שוק גרועים, אחרי רצף הפסדים, או כשלא היה סטאפ — אם הסיבות שנבחרו/היומן תומכים בזה. אם זו פשוט הימנעות לא-מוסברת — כתוב זאת בכנות, בלי מחמאות גנריות.
+כתוב את שני החלקים תחת הכותרת הזו:
+**חוזקות:** האם בהיעדרות הזו יש משמעת חיובית — הימנעות ממסחר בתנאי שוק גרועים, אחרי רצף הפסדים, או כשלא היה סטאפ (אם הסיבות שנבחרו/היומן תומכים בזה).
+**שיפור:** האם ההיעדרות מסמנת שיפור לעומת העסקאות הקודמות — למשל הפסקת מסחר-יתר או הימנעות מטעות שחזרה בעבר.
+אם זו פשוט הימנעות לא-מוסברת — כתוב זאת בכנות, בלי מחמאות גנריות.
 
 ## דפוס אפשרי
 האם יש סיבה עקבית להיעדר המסחר? לדוגמא: הפסדים רצופים לפני התקופה, ימים מסוימים, תנאי שוק. אם אין מידע מספיק — כתוב "אין מספיק נתונים לאיתור דפוס".
@@ -111,7 +114,7 @@ ${historyBlock}
     const noTradesBody = JSON.stringify({
       systemInstruction: { parts: [{ text: noTradesSystemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: noTradesUserPrompt }] }],
-      generationConfig: { maxOutputTokens: 850, temperature: 0.7, thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { maxOutputTokens: 1000, temperature: 0.7, thinkingConfig: { thinkingBudget: 0 } },
     });
 
     try {
@@ -156,7 +159,7 @@ ${historyBlock}
       });
     } catch {
       return Response.json({
-        summary: `## מה קרה\nלא בוצעו עסקאות בתקופה ${weekStart} עד ${weekEnd}.\n\n## דפוס אפשרי\nאין מספיק נתונים לניתוח אוטומטי.\n\n## המלצה\nהוסף הערות ולחץ Generate לניתוח מעמיק.`,
+        summary: `## מה קרה\nלא בוצעו עסקאות בתקופה ${weekStart} עד ${weekEnd}.\n\n## מה עשית טוב\nאין מספיק נתונים — הוסף הערות ולחץ Generate.\n\n## דפוס אפשרי\nאין מספיק נתונים לניתוח אוטומטי.\n\n## המלצה\nהוסף הערות ולחץ Generate לניתוח מעמיק.`,
         source: 'stats',
       });
     }
@@ -224,6 +227,14 @@ ${historyBlock}
     freeNotes.trim() ? `━ הערות חופשיות ━\n${freeNotes.trim()}` : '',
   ].filter(Boolean).join('\n\n');
 
+  const historyBlock = historicalTrades.length > 0
+    ? historicalTrades.map((t) => {
+        const res = t.winLose[0] ?? '?';
+        const pnl = t.pnl != null ? `${t.pnl >= 0 ? '+' : ''}$${t.pnl.toFixed(2)}` : '—';
+        return `${t.date} | ${res} | ${pnl}${t.notes?.trim() ? ` | ${t.notes.trim()}` : ''}`;
+      }).join('\n')
+    : '(אין עסקאות קודמות להשוואה)';
+
   const systemPrompt = `You are a professional trading mentor and data analyst reading a trader's personal journal. Your only job in the "בעיה שחוזרת על עצמה" section is to find the real behavioral problem — the mistake that actually cost money or discipline. Nothing else.
 
 ━━ HOW TO CLASSIFY EACH NOTE ━━
@@ -289,6 +300,16 @@ A strength is evidence-based discipline or improvement — NOT a compliment. Sur
 A high win-rate or positive PNL alone is NOT a strength unless the journal shows the process behind it was sound.
 If the evidence does not support any real strength — say so plainly. Never invent strengths and never give generic praise ("עבודה טובה", "המשך כך").
 
+━━ HOW TO IDENTIFY IMPROVEMENT (for the "במה השתפרת" section) ━━
+
+Improvement is different from a strength: a strength is something good you did this period; improvement is something that got BETTER versus before. Compare this period against the "עסקאות קודמות" history provided, and also look at the trend WITHIN the period.
+A real improvement is a measurable behavioral change for the better:
+  → A mistake that was recurring before and did NOT repeat this period (e.g. stopped revenge-trading, stopped widening the stop, stopped overtrading)
+  → Better discipline / better stop handling / fewer FOMO entries than the historical baseline
+  → Rising win-rate or PNL that is clearly driven by sounder process, not luck
+  → A within-period trajectory: started shaky and ended disciplined
+Only claim improvement if the comparison or the within-period trend actually supports it. If there is no evidence of improvement — say so honestly. Do not confuse a stable strength with an improvement.
+
 ━━ ANALYSIS PROCESS ━━
 1. Read every NOTES entry. Classify each one: problem / solution / observation / reflection.
 2. Group the PROBLEM entries by theme. What is the underlying behavior causing the issue?
@@ -314,6 +335,9 @@ ${journalNotesBlock || '(אין הערות בתקופה זו)'}
 ━━━ נתונים סטטיסטיים ━━━
 ${analyticsBlock}
 
+━━━ עסקאות קודמות (להשוואה וזיהוי שיפור) ━━━
+${historyBlock}
+
 ---
 כתוב בדיוק ארבעה סעיפים, כל אחד 2-3 משפטים:
 
@@ -321,10 +345,13 @@ ${analyticsBlock}
 תיאור התקופה — שלב מספרים עם מה שעולה מהיומן. אל תציין תאריכים.
 
 ## מה עשית טוב
-חוזקה אחת או שתיים שבאמת באות לידי ביטוי ביומן/בנתונים — מה שעבד, מה שכובד (סטופ/יעד/כללים), מה ששופר מול תקופות קודמות. מבוסס ראיות בלבד; אם אין חוזקה ברורה — כתוב זאת ישירות, בלי מחמאות גנריות.
+חובה לכתוב את שני החלקים, בשני משפטים נפרדים תחת הכותרת הזו:
+**חוזקות:** חוזקה אחת-שתיים שבאמת באות לידי ביטוי ביומן/בנתונים — מה שעבד, מה שכובד (סטופ/יעד/כללים).
+**שיפור:** מה השתפר בתקופה הזו לעומת העסקאות הקודמות — טעות שחזרה בעבר ולא חזרה הפעם, משמעת/ניהול סטופ טובים יותר, או מגמה חיובית בתוך התקופה.
+מבוסס ראיות והשוואה בלבד; אם אחד מהחלקים לא קיים בנתונים — כתוב זאת ישירות, בלי מחמאות גנריות. אל תציין תאריכים.
 
 ## בעיה שחוזרת על עצמה
-סווג כל ערך NOTES לפני שכותב — כולל כל יום צפייה בנפרד. עבור כל יום צפייה: האם יש סימן לפספוס הזדמנות (TYPE B), היסוס (TYPE C), או יום שקט לא מוסבר בתוך שבוע פעיל? ספור רק בעיות אמיתיות. תאר: מה קורה, מתי זה מופעל, למה זה פוגע בביצועים.
+סווג כל ערך NOTES לפני שכותב — כולל כל יום צפייה בנפרד. עבור כל יום צפייה: האם יש סימן לפספוס הזדמנות (TYPE B), היסוס (TYPE C), או יום שקט לא מוסבר בתוך שבוע פעיל? ספור רק בעיות אמיתיות. תאר: מה קורה, מתי זה מופעל, למה זה פוגע בביצועים. אל תציין תאריכים.
 
 ## פתרון
 פעולה אחת ספציפית שנגזרת ישירות מהבעיה. אפשר לבצע כבר בסשן הבא.`;
@@ -333,7 +360,7 @@ ${analyticsBlock}
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
     generationConfig: {
-      maxOutputTokens: 1300,
+      maxOutputTokens: 1500,
       temperature: 0.7,
       thinkingConfig: { thinkingBudget: 0 },
     },
