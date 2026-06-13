@@ -94,10 +94,13 @@ ${freeNotes.trim() || '(לא נכתב)'}
 ${historyBlock}
 
 ---
-כתוב בדיוק שלושה סעיפים, כל אחד 2-3 משפטים:
+כתוב בדיוק ארבעה סעיפים, כל אחד 2-3 משפטים:
 
 ## מה קרה
 תאר את ימי ההיעדר — מה עולה מהיומן, מהסיבות שנבחרו, ומההקשר ההיסטורי.
+
+## מה עשית טוב
+האם בהיעדרות הזו יש משמעת חיובית? למשל הימנעות ממסחר בתנאי שוק גרועים, אחרי רצף הפסדים, או כשלא היה סטאפ — אם הסיבות שנבחרו/היומן תומכים בזה. אם זו פשוט הימנעות לא-מוסברת — כתוב זאת בכנות, בלי מחמאות גנריות.
 
 ## דפוס אפשרי
 האם יש סיבה עקבית להיעדר המסחר? לדוגמא: הפסדים רצופים לפני התקופה, ימים מסוימים, תנאי שוק. אם אין מידע מספיק — כתוב "אין מספיק נתונים לאיתור דפוס".
@@ -108,7 +111,7 @@ ${historyBlock}
     const noTradesBody = JSON.stringify({
       systemInstruction: { parts: [{ text: noTradesSystemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: noTradesUserPrompt }] }],
-      generationConfig: { maxOutputTokens: 600, temperature: 0.7, thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { maxOutputTokens: 850, temperature: 0.7, thinkingConfig: { thinkingBudget: 0 } },
     });
 
     try {
@@ -275,6 +278,17 @@ IMPORTANT: The list above is a reference library, not a checklist. Only surface 
 
 Tags like "FINE SETUP", "GOOD R:R", "MY BIAS WAS RIGHT", "followed plan", "good execution" are quality assessments — NOT emotions. Only tags like FOMO, revenge, fear, hesitation describe emotional states. Do NOT mention this field unless it shows a clear emotional pattern.
 
+━━ HOW TO IDENTIFY A REAL STRENGTH (for the "מה עשית טוב" section) ━━
+
+A strength is evidence-based discipline or improvement — NOT a compliment. Surface a strength only if multiple journal entries or the stats actually support it:
+  → Respected the stop / honored the target exactly as planned ("כיבדתי סטופ", "יצאתי ב-TP", "החזקתי עד היעד")
+  → Good R:R, took an A/A+ setup, entered only after confirmation
+  → Cut a loss by the plan instead of widening the stop or averaging down
+  → Avoided overtrading / stayed selective / respected daily limits
+  → Measurable improvement vs. earlier behavior: fewer revenge trades, logical structural stop instead of a tight fixed one, stopped after the loss limit
+A high win-rate or positive PNL alone is NOT a strength unless the journal shows the process behind it was sound.
+If the evidence does not support any real strength — say so plainly. Never invent strengths and never give generic praise ("עבודה טובה", "המשך כך").
+
 ━━ ANALYSIS PROCESS ━━
 1. Read every NOTES entry. Classify each one: problem / solution / observation / reflection.
 2. Group the PROBLEM entries by theme. What is the underlying behavior causing the issue?
@@ -301,10 +315,13 @@ ${journalNotesBlock || '(אין הערות בתקופה זו)'}
 ${analyticsBlock}
 
 ---
-כתוב בדיוק שלושה סעיפים, כל אחד 2-3 משפטים:
+כתוב בדיוק ארבעה סעיפים, כל אחד 2-3 משפטים:
 
 ## מה קרה
 תיאור התקופה — שלב מספרים עם מה שעולה מהיומן. אל תציין תאריכים.
+
+## מה עשית טוב
+חוזקה אחת או שתיים שבאמת באות לידי ביטוי ביומן/בנתונים — מה שעבד, מה שכובד (סטופ/יעד/כללים), מה ששופר מול תקופות קודמות. מבוסס ראיות בלבד; אם אין חוזקה ברורה — כתוב זאת ישירות, בלי מחמאות גנריות.
 
 ## בעיה שחוזרת על עצמה
 סווג כל ערך NOTES לפני שכותב — כולל כל יום צפייה בנפרד. עבור כל יום צפייה: האם יש סימן לפספוס הזדמנות (TYPE B), היסוס (TYPE C), או יום שקט לא מוסבר בתוך שבוע פעיל? ספור רק בעיות אמיתיות. תאר: מה קורה, מתי זה מופעל, למה זה פוגע בביצועים.
@@ -316,7 +333,7 @@ ${analyticsBlock}
     systemInstruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
     generationConfig: {
-      maxOutputTokens: 1000,
+      maxOutputTokens: 1300,
       temperature: 0.7,
       thinkingConfig: { thinkingBudget: 0 },
     },

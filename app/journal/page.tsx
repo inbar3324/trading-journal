@@ -12,7 +12,8 @@ import { NotebookView } from '@/components/journal/notebook/NotebookView';
 
 // Parse a fetch Response as JSON, but surface a clean error when the server
 // returns an HTML error page (e.g. a 500) instead of JSON.
-async function readJson(res: Response): Promise<Record<string, unknown>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readJson(res: Response): Promise<Record<string, any>> {
   const text = await res.text();
   try {
     return text ? JSON.parse(text) : {};
