@@ -91,7 +91,7 @@ export default function JournalPage() {
       if (realDbId) sh['x-notion-realdb'] = realDbId;
       const res = await fetch('/api/notion/pages', { headers: sh });
       const data = await readJson(res);
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(String(data.error));
       // Drop rows we've archived locally but Notion's query may not reflect yet (eventual consistency).
       setPages((data.pages as NotionPage[]).filter(p => !deletedIdsRef.current.has(p.id)));
       setSchema(data.schema as NotionDbSchema);
@@ -127,7 +127,7 @@ export default function JournalPage() {
         body: JSON.stringify({ patch: { [propName]: next } }),
       });
       const data = await readJson(res);
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(String(data.error));
       // Replace with server-truth (in case Notion normalized values).
       setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
     } catch (e) {
@@ -169,7 +169,7 @@ export default function JournalPage() {
         body: JSON.stringify({ patch, realDbId }),
       });
       const data = await readJson(res);
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(String(data.error));
       setPages(curr => [...curr, data.page as NotionPage]);
       setDraft(null);
     } catch (e) {
@@ -198,7 +198,7 @@ export default function JournalPage() {
     try {
       const res = await fetch(`/api/notion/pages/${pageId}`, { method: 'DELETE', headers });
       const data = await readJson(res);
-      if (data.error) throw new Error(data.error);
+      if (data.error) throw new Error(String(data.error));
     } catch (e) {
       deletedIdsRef.current.delete(pageId);
       setPages(prev);
