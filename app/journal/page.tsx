@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, RefreshCw, Table as TableIcon, Calendar, LayoutGrid, BarChart3, BookOpen, ChevronDown, X, Trash2 } from 'lucide-react';
@@ -8,7 +8,18 @@ import { EditableCell } from '@/components/journal/v2/EditableCell';
 import { colWidth } from '@/components/journal/v2/widths';
 import { NotebookView } from '@/components/journal/notebook/NotebookView';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+// Parse a fetch Response as JSON, but surface a clean error when the server
+// returns an HTML error page (e.g. a 500) instead of JSON.
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`Server error ${res.status} ${res.statusText}`.trim());
+  }
+}
 
 function emptyValue(type: NotionPropDef['type']): NotionPropValue {
   switch (type) {
@@ -43,7 +54,7 @@ function emptyPage(schema: NotionDbSchema): Record<string, NotionPropValue> {
   return out;
 }
 
-// ── View tabs ─────────────────────────────────────────────────────────────────
+// â”€â”€ View tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const VIEW_TABS = [
   { id: 'table',    label: 'Table',     icon: TableIcon },
   { id: 'notebook', label: 'Notebook',  icon: BookOpen },
@@ -52,7 +63,7 @@ const VIEW_TABS = [
   { id: 'stats',    label: 'statistic', icon: BarChart3 },
 ];
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function JournalPage() {
   const [pages, setPages] = useState<NotionPage[]>([]);
@@ -67,20 +78,22 @@ export default function JournalPage() {
   const [saving, setSaving] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const draftRowRef = useRef<HTMLTableRowElement>(null);
+  const deletedIdsRef = useRef<Set<string>>(new Set());
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const headers = useMemo(() => notionHeaders(getNotionConfig()), []);
 
-  // ── Fetch pages + schema ───────────────────────────────────────────────────
+  // â”€â”€ Fetch pages + schema â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
     try {
       const sh: Record<string, string> = { ...headers };
       if (realDbId) sh['x-notion-realdb'] = realDbId;
       const res = await fetch('/api/notion/pages', { headers: sh });
-      const data = await res.json();
+      const data = await readJson(res);
       if (data.error) throw new Error(data.error);
-      setPages(data.pages as NotionPage[]);
+      // Drop rows we've archived locally but Notion's query may not reflect yet (eventual consistency).
+      setPages((data.pages as NotionPage[]).filter(p => !deletedIdsRef.current.has(p.id)));
       setSchema(data.schema as NotionDbSchema);
       if (data.realDbId) {
         setRealDbId(data.realDbId);
@@ -99,7 +112,7 @@ export default function JournalPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchAll]);
 
-  // ── Edit a cell ────────────────────────────────────────────────────────────
+  // â”€â”€ Edit a cell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const commitEdit = useCallback(async (pageId: string, propName: string, next: NotionPropValue) => {
     const prev = pages;
     // Optimistic
@@ -113,7 +126,7 @@ export default function JournalPage() {
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ patch: { [propName]: next } }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (data.error) throw new Error(data.error);
       // Replace with server-truth (in case Notion normalized values).
       setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
@@ -124,7 +137,7 @@ export default function JournalPage() {
     }
   }, [headers, pages]);
 
-  // ── Inline new row ─────────────────────────────────────────────────────────
+  // â”€â”€ Inline new row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startInline = () => setDraft(emptyPage(schema));
   const cancelInline = () => setDraft(null);
 
@@ -155,7 +168,7 @@ export default function JournalPage() {
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({ patch, realDbId }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (data.error) throw new Error(data.error);
       setPages(curr => [...curr, data.page as NotionPage]);
       setDraft(null);
@@ -176,33 +189,35 @@ export default function JournalPage() {
     return () => { clearTimeout(t); document.removeEventListener('mousedown', onMouseDown); };
   }, [draft, commitInline]);
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function archiveRow(pageId: string) {
     if (!confirm('Move this row to trash?')) return;
     const prev = pages;
+    deletedIdsRef.current.add(pageId);
     setPages(curr => curr.filter(p => p.id !== pageId));
     try {
       const res = await fetch(`/api/notion/pages/${pageId}`, { method: 'DELETE', headers });
-      const data = await res.json();
+      const data = await readJson(res);
       if (data.error) throw new Error(data.error);
     } catch (e) {
+      deletedIdsRef.current.delete(pageId);
       setPages(prev);
       alert(e instanceof Error ? e.message : 'Delete failed');
     }
   }
 
-  // ── File upload (for files-type cells) ─────────────────────────────────────
+  // â”€â”€ File upload (for files-type cells) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const uploadFile = useCallback(async (pageId: string, propName: string, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('prop', propName);
     const res = await fetch(`/api/notion/pages/${pageId}/file`, { method: 'POST', headers, body: fd });
-    const data = await res.json();
+    const data = await readJson(res);
     if (data.error) throw new Error(data.error);
     if (data.page) setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
   }, [headers]);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
     return (
       <div style={{ padding: 32 }}>
@@ -219,7 +234,7 @@ export default function JournalPage() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.4 }}>⚠</div>
+          <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.4 }}>âš </div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>{error}</div>
           <button onClick={() => fetchAll()} style={{ padding: '7px 16px', borderRadius: 8, background: 'var(--blue)', color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             Retry
@@ -303,7 +318,7 @@ export default function JournalPage() {
         <NotebookView pages={pages} schema={schema} dbId={realDbId ?? schema.realDbId ?? ''} />
       ) : activeView !== 'table' ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-          {VIEW_TABS.find(v => v.id === activeView)?.label} view — coming soon
+          {VIEW_TABS.find(v => v.id === activeView)?.label} view â€” coming soon
         </div>
       ) : (
         <>
@@ -312,7 +327,7 @@ export default function JournalPage() {
             <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{pages.length} rows</span>
           </div>
 
-          {/* Table — scrollable */}
+          {/* Table â€” scrollable */}
           <div className="journal-scroll" style={{ flex: 1, overflow: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: tableMin }}>
               <thead>
@@ -399,7 +414,7 @@ export default function JournalPage() {
                   <tr>
                     <td colSpan={cols.length + 1} style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                        <span>{saving ? 'Saving…' : 'Click outside to save'}</span>
+                        <span>{saving ? 'Savingâ€¦' : 'Click outside to save'}</span>
                         <button data-cancel="true" onClick={cancelInline}
                           style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 11, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: 4, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <X size={11} /> Cancel

@@ -435,13 +435,19 @@ function DateRangePopover({
   const [start, setStart] = useState(initStart);
   const [end, setEnd] = useState(initEnd);
   const [hasEnd, setHasEnd] = useState(!!initEnd);
+  const [viewMonth, setViewMonth] = useState(() => {
+    const base = initStart || toISO(new Date());
+    const [y, m] = base.split('-').map(Number);
+    return new Date(y, m - 1, 1);
+  });
   const popRef = useRef<HTMLDivElement>(null);
 
-  const popWidth = 252;
+  const popWidth = 268;
+  const estHeight = hasEnd ? 380 : 348;
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
   const spaceBelow = vh - anchorRect.bottom - 8;
-  const top = spaceBelow > 260 ? anchorRect.bottom + 6 : anchorRect.top - 6 - Math.min(260, 260);
+  const top = spaceBelow > estHeight ? anchorRect.bottom + 6 : Math.max(8, anchorRect.top - 6 - estHeight);
   const left = Math.min(anchorRect.left, vw - popWidth - 12);
 
   useEffect(() => {
@@ -458,33 +464,116 @@ function DateRangePopover({
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [start, end, hasEnd, onCommit, onClose]);
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box',
-    background: 'var(--bg-surface)', border: '1px solid var(--border-color)',
-    borderRadius: 6, padding: '6px 10px', fontSize: 13,
-    color: 'var(--text-primary)', colorScheme: 'dark', outline: 'none',
-  };
+  const todayISO = toISO(new Date());
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const weekdays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+  function pickDay(iso: string) {
+    if (!hasEnd) { setStart(iso); onCommit(iso, ''); return; }
+    // range mode
+    if (!start || (start && end)) { setStart(iso); setEnd(''); return; }
+    if (iso < start) { setStart(iso); return; }
+    setEnd(iso); onCommit(start, iso);
+  }
+
+  // Build the 6×7 grid for the displayed month.
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const cells: { iso: string; inMonth: boolean; day: number }[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(year, month, 1 - firstWeekday + i);
+    cells.push({ iso: toISO(d), inMonth: d.getMonth() === month, day: d.getDate() });
+  }
+
+  function navBtnStyle(): React.CSSProperties {
+    return {
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 26, height: 26, borderRadius: 6, cursor: 'pointer',
+      background: 'transparent', border: 'none', color: 'var(--text-secondary)',
+    };
+  }
 
   return (
     <div
       ref={popRef}
+      data-popover
+      onClick={e => e.stopPropagation()}
       style={{
         position: 'fixed', top, left, zIndex: 9999, width: popWidth,
         background: 'var(--bg-card)', border: '1px solid var(--border-color)',
         borderRadius: 10, boxShadow: '0 12px 40px rgba(0,0,0,0.55)',
-        padding: '14px 14px 12px',
+        padding: '12px 12px 10px',
       }}
     >
-      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
-        Date
+      {/* Month navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <button
+          onClick={() => setViewMonth(new Date(year, month - 1, 1))}
+          style={navBtnStyle()}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          aria-label="Previous month"
+        ><ChevronLeft size={16} /></button>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+          {months[month]} {year}
+        </div>
+        <button
+          onClick={() => setViewMonth(new Date(year, month + 1, 1))}
+          style={navBtnStyle()}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          aria-label="Next month"
+        ><ChevronRight size={16} /></button>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Start</div>
-        <input type="date" autoFocus value={start} onChange={e => setStart(e.target.value)} style={inputStyle} />
+      {/* Weekday headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 2 }}>
+        {weekdays.map(w => (
+          <div key={w} style={{ textAlign: 'center', fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', padding: '4px 0' }}>{w}</div>
+        ))}
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: hasEnd ? 10 : 12, userSelect: 'none' }}>
+      {/* Day grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+        {cells.map(c => {
+          const isStart = !!start && c.iso === start;
+          const isEnd = !!end && c.iso === end;
+          const inRange = hasEnd && !!start && !!end && c.iso > start && c.iso < end;
+          const isToday = c.iso === todayISO;
+          const selected = isStart || isEnd;
+          return (
+            <button
+              key={c.iso}
+              onClick={() => pickDay(c.iso)}
+              style={{
+                position: 'relative', height: 30, border: 'none', cursor: 'pointer',
+                borderRadius: 6, fontSize: 12.5,
+                fontWeight: selected ? 600 : (isToday ? 600 : 400),
+                background: selected ? 'var(--blue)' : (inRange ? 'color-mix(in srgb, var(--blue) 22%, transparent)' : 'transparent'),
+                color: selected ? '#fff'
+                  : c.inMonth ? (isToday ? 'var(--blue)' : 'var(--text-primary)')
+                  : 'var(--text-muted)',
+                opacity: c.inMonth ? 1 : 0.45,
+                transition: 'background 120ms',
+              }}
+              onMouseEnter={e => { if (!selected) e.currentTarget.style.background = inRange ? 'color-mix(in srgb, var(--blue) 30%, transparent)' : 'var(--bg-surface)'; }}
+              onMouseLeave={e => { if (!selected) e.currentTarget.style.background = inRange ? 'color-mix(in srgb, var(--blue) 22%, transparent)' : 'transparent'; }}
+            >
+              {c.day}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected summary */}
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 10, minHeight: 16 }}>
+        {start ? formatDate(start) : <span style={{ color: 'var(--text-muted)' }}>No date selected</span>}
+        {hasEnd && end ? ` → ${formatDate(end)}` : ''}
+      </div>
+
+      {/* End date toggle */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 8, userSelect: 'none' }}>
         <div
           onClick={() => { setHasEnd(h => !h); if (hasEnd) setEnd(''); }}
           style={{
@@ -502,14 +591,7 @@ function DateRangePopover({
         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>End date</span>
       </label>
 
-      {hasEnd && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>End</div>
-          <input type="date" value={end} min={start || undefined} onChange={e => setEnd(e.target.value)} style={inputStyle} />
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 2 }}>
         {(start || end) ? (
           <button
             onClick={() => { setStart(''); setEnd(''); setHasEnd(false); }}
@@ -527,6 +609,11 @@ function DateRangePopover({
       </div>
     </div>
   );
+}
+
+function toISO(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function TextareaInput({
