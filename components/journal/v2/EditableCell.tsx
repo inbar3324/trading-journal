@@ -14,6 +14,8 @@ interface Props {
   onCommit: (next: NotionPropValue) => void;
   // Used only by file uploader.
   onUploadFile?: (file: File) => Promise<void>;
+  // Delete a single file by index (files-type cells only).
+  onDeleteFile?: (index: number) => Promise<void>;
   // When true, the cell starts in edit mode (used for inline new-row).
   initialEdit?: boolean;
   autoFocus?: boolean;
@@ -25,7 +27,7 @@ const READONLY_TYPES = new Set([
   'unique_id', 'unsupported',
 ]);
 
-export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit, autoFocus }: Props) {
+export function EditableCell({ prop, value, onCommit, onUploadFile, onDeleteFile, initialEdit, autoFocus }: Props) {
   const [editing, setEditing] = useState(!!initialEdit);
   const [popRect, setPopRect] = useState<DOMRect | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
@@ -177,6 +179,7 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, initialEdit,
       onCommit={(next) => { onCommit(next); setEditing(false); }}
       onCancel={() => setEditing(false)}
       onUploadFile={onUploadFile}
+      onDeleteFile={onDeleteFile}
     />
   );
 }
@@ -325,9 +328,10 @@ interface InlineProps {
   onCommit: (v: NotionPropValue) => void;
   onCancel: () => void;
   onUploadFile?: (file: File) => Promise<void>;
+  onDeleteFile?: (index: number) => Promise<void>;
 }
 
-function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile }: InlineProps) {
+function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile, onDeleteFile }: InlineProps) {
   const inputBase: React.CSSProperties = {
     background: 'transparent', border: 'none', outline: 'none',
     color: 'var(--text-primary)', fontSize: 13, width: '100%', fontFamily: 'inherit', padding: 0,
@@ -416,7 +420,7 @@ function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile
     );
   }
   if (prop.type === 'files') {
-    return <FileUploader value={value.type === 'files' ? value.files : []} onUploadFile={onUploadFile} onClose={onCancel} />;
+    return <FileUploader value={value.type === 'files' ? value.files : []} onUploadFile={onUploadFile} onDeleteFile={onDeleteFile} onClose={onCancel} />;
   }
 
   // Anything else falls back to display.
@@ -683,20 +687,31 @@ function TextInput({
 }
 
 function FileUploader({
-  value, onUploadFile, onClose,
+  value, onUploadFile, onDeleteFile, onClose,
 }: {
   value: FileRef[];
   onUploadFile?: (file: File) => Promise<void>;
+  onDeleteFile?: (index: number) => Promise<void>;
   onClose: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [deletingIdx, setDeletingIdx] = useState<number | null>(null);
 
   async function handleFile(f: File | null | undefined) {
     if (!f || !onUploadFile) return;
     setUploading(true);
     try { await onUploadFile(f); }
     finally { setUploading(false); onClose(); }
+  }
+
+  async function handleDelete(i: number) {
+    if (!onDeleteFile || deletingIdx !== null) return;
+    setDeletingIdx(i);
+    try { await onDeleteFile(i); }
+    catch { /* parent surfaces errors */ }
+    finally { setDeletingIdx(null); }
   }
 
   // Paste image from clipboard
@@ -714,20 +729,55 @@ function FileUploader({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onUploadFile]);
 
+  // Close (reset to display mode) when clicking outside this cell.
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) onClose();
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', onDown); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-      <button onClick={() => inputRef.current?.click()} disabled={uploading || !onUploadFile}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 3,
-          padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border-color)',
-          background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer',
-        }}
-      >
-        <Plus size={11} /> {uploading ? 'Uploading…' : 'Upload'}
-      </button>
-      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-        {value.length > 0 ? `${value.length} file${value.length === 1 ? '' : 's'}` : 'Ctrl+V to paste'}
-      </span>
+    <div ref={rootRef} onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+      {value.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {value.map((f, i) => (
+            <div key={i} style={{ position: 'relative', width: 40, height: 30 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={f.url} alt=""
+                style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border-color)', opacity: deletingIdx === i ? 0.4 : 1 }} />
+              {onDeleteFile && (
+                <button onClick={() => handleDelete(i)} disabled={deletingIdx !== null}
+                  title="Delete image"
+                  style={{
+                    position: 'absolute', top: -6, right: -6,
+                    width: 16, height: 16, padding: 0, borderRadius: '50%',
+                    border: '1px solid var(--border-color)', background: 'var(--red)', color: '#fff',
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                  }}
+                ><X size={10} strokeWidth={3} /></button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button onClick={() => inputRef.current?.click()} disabled={uploading || !onUploadFile}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border-color)',
+            background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: 11, cursor: 'pointer',
+          }}
+        >
+          <Plus size={11} /> {uploading ? 'Uploading…' : 'Upload'}
+        </button>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+          {value.length > 0 ? `${value.length} file${value.length === 1 ? '' : 's'}` : 'Ctrl+V to paste'}
+        </span>
+      </div>
       <input ref={inputRef} type="file" accept="image/*" hidden onChange={e => handleFile(e.target.files?.[0])} />
     </div>
   );

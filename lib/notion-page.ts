@@ -321,7 +321,7 @@ export function buildPropertiesPatch(
         out[name] = {
           files: v.files.map(f => f.external
             ? { type: 'external', name: f.name, external: { url: f.url } }
-            : { type: 'external', name: f.name, external: { url: f.url } }
+            : { type: 'file', name: f.name, file: { url: f.url } }
           ),
         };
         break;

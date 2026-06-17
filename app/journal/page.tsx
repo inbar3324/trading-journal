@@ -218,6 +218,15 @@ export default function JournalPage() {
     if (data.page) setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
   }, [headers]);
 
+  const deleteFile = useCallback(async (pageId: string, propName: string, index: number) => {
+    const res = await fetch(`/api/notion/pages/${pageId}/file?prop=${encodeURIComponent(propName)}&index=${index}`, {
+      method: 'DELETE', headers,
+    });
+    const data = await readJson(res);
+    if (data.error) throw new Error(data.error);
+    if (data.page) setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
+  }, [headers]);
+
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
     return (
@@ -366,6 +375,7 @@ export default function JournalPage() {
                             value={value}
                             onCommit={(next) => commitEdit(page.id, col.name, next)}
                             onUploadFile={col.type === 'files' ? (f) => uploadFile(page.id, col.name, f) : undefined}
+                            onDeleteFile={col.type === 'files' ? (i) => deleteFile(page.id, col.name, i) : undefined}
                           />
                         </td>
                       );

@@ -72,3 +72,55 @@ export async function POST(
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+// Remove a single file from a files-type property by index.
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const key = req.headers.get('x-notion-key');
+    if (!key) return NextResponse.json({ error: 'Missing Notion token' }, { status: 401 });
+    const auth = `Bearer ${key}`;
+
+    const { searchParams } = new URL(req.url);
+    const prop = searchParams.get('prop');
+    const index = Number(searchParams.get('index'));
+    if (!prop || !Number.isInteger(index) || index < 0) {
+      return NextResponse.json({ error: 'Missing prop or index' }, { status: 400 });
+    }
+
+    const pageRes = await fetch(`https://api.notion.com/v1/pages/${id}`, {
+      headers: { Authorization: auth, 'Notion-Version': NOTION_VERSION },
+    });
+    const pageData = await pageRes.json() as Record<string, unknown>;
+    const props = pageData.properties as Record<string, Record<string, unknown>> | undefined;
+    const existingFiles = ((props?.[prop]?.files as Array<Record<string, unknown>>) ?? []);
+    if (index >= existingFiles.length) {
+      return NextResponse.json({ error: 'Index out of range' }, { status: 400 });
+    }
+
+    // Re-send the remaining files in their original Notion shape (preserves uploads).
+    const remaining = existingFiles
+      .filter((_, i) => i !== index)
+      .map(f => f.type === 'external'
+        ? { type: 'external', name: f.name, external: f.external }
+        : { type: 'file', name: f.name, file: f.file }
+      );
+
+    const patchRes = await fetch(`https://api.notion.com/v1/pages/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: auth, 'Notion-Version': NOTION_VERSION, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ properties: { [prop]: { files: remaining } } }),
+    });
+    const patchData = await patchRes.json() as Record<string, unknown>;
+    if (!patchRes.ok) throw new Error((patchData.message as string) ?? 'Failed to update page');
+
+    const page = parsePage(patchData);
+    return NextResponse.json({ page });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
