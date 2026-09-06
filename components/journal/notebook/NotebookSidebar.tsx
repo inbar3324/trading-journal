@@ -80,7 +80,8 @@ export function NotebookSidebar({
   return (
     <div style={{
       width: isMobile ? '100%' : 280,
-      height: isMobile ? '100%' : undefined,
+      height: '100%',
+      minHeight: 0,
       flexShrink: 0,
       borderRight: isMobile ? 'none' : `1px solid ${palette.border}`,
       background: palette.sidebarBg,
@@ -89,7 +90,7 @@ export function NotebookSidebar({
     }}>
       {/* Controls */}
       <div style={{
-        padding: '10px 12px', borderBottom: `1px solid ${palette.border}`,
+        padding: '10px 12px', borderBottom: `1px solid ${palette.border}`, flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
       }}>
         <button onClick={onOpenSetup} title="Configure fields"
@@ -127,7 +128,7 @@ export function NotebookSidebar({
       </div>
 
       {/* Entry list */}
-      <div style={{ overflow: 'auto', flex: 1 }}>
+      <div className="journal-scroll" style={{ overflowY: 'scroll', overflowX: 'auto', flex: 1, minHeight: 0 }}>
         {pages.length === 0 ? (
           <div style={{ padding: 16, fontSize: 12, color: palette.textMuted }}>—</div>
         ) : pages.map(page => {

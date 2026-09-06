@@ -135,7 +135,7 @@ export function NotebookView({ pages, schema, dbId }: Props) {
 
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, background: palette.bg, position: 'relative' }}>
-      <div style={sidebarMobileStyle}>
+      <div style={{ minHeight: 0, flexShrink: 0, ...sidebarMobileStyle }}>
         <NotebookSidebar
           pages={sortedPages}
           schema={schema}
@@ -159,7 +159,7 @@ export function NotebookView({ pages, schema, dbId }: Props) {
         />
       )}
 
-      <div style={{ flex: 1, overflow: 'auto', position: 'relative', width: '100%' }}>
+      <div className="journal-scroll" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'scroll', overflowX: 'auto', position: 'relative', width: '100%' }}>
         {isMobile && (
           <button
             onClick={() => setDrawerOpen(true)}
