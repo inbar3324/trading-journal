@@ -3,7 +3,7 @@
 import type { NotionPropValue } from './notion-page';
 import type { WColType, WColumn } from './weekly-types';
 
-export const NOTION_VERSION = '2025-09-03';
+export const NOTION_VERSION = '2026-03-11';
 
 // ── WColType ↔ Notion property type ──────────────────────────────────────────
 
@@ -96,12 +96,13 @@ function isEmptyCell(cell: NotionPropValue): boolean {
 export function buildPageProperties(
   columns: WColumn[],
   cells: Record<string, NotionPropValue>,
+  includeEmpty = false,
 ): Record<string, unknown> {
   const props: Record<string, unknown> = {};
   columns.forEach((col, idx) => {
     const cell = cells[col.id];
     if (!cell) return;
-    if (isEmptyCell(cell)) return;
+    if (!includeEmpty && isEmptyCell(cell)) return;
     const isTitle = col.notionType ? col.notionType === 'title' : idx === 0;
     const v = valueToPageProp(cell, isTitle);
     if (v !== null && v !== undefined) props[col.name] = v;

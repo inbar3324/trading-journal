@@ -21,7 +21,7 @@ export interface WRow {
 }
 
 export interface WStore {
-  notion?: { dbId: string; dbUrl: string } | null;
+  notion?: { dbId: string; dbUrl: string; viewId?: string } | null;
   columns: WColumn[];
   rows: WRow[];
 }

@@ -18,7 +18,7 @@ export async function PATCH(
       method: 'PATCH',
       headers: notionHeaders(key),
       body: JSON.stringify({
-        properties: buildPageProperties(body.columns, body.cells ?? {}),
+        properties: buildPageProperties(body.columns, body.cells ?? {}, true),
       }),
     });
     if (!res.ok) {
@@ -46,7 +46,7 @@ export async function DELETE(
     const res = await fetch(`https://api.notion.com/v1/pages/${pageId}`, {
       method: 'PATCH',
       headers: notionHeaders(key),
-      body: JSON.stringify({ archived: true }),
+      body: JSON.stringify({ in_trash: true }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

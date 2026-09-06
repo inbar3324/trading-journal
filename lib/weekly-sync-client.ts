@@ -17,6 +17,7 @@ interface PullResponse {
   };
   pages: NotionPageRaw[];
   orderFromView?: boolean;
+  viewId: string;
 }
 
 function headers(): Record<string, string> {
@@ -57,12 +58,19 @@ async function callJson<T>(
   return data;
 }
 
-export async function pullDb(dbId: string): Promise<PullResponse> {
+export async function pullDb(dbId: string, viewId?: string): Promise<PullResponse> {
+  const query = viewId ? `?viewId=${encodeURIComponent(viewId)}` : '';
   return callJson<PullResponse>(
-    `/api/weekly/db/${dbId}`,
-    { headers: headers() },
+    `/api/weekly/db/${dbId}${query}`,
+    { method: 'POST', headers: headers() },
     'Pull failed',
   );
+}
+
+export async function reorderColumns(dbId: string, viewId: string | undefined, columnIds: string[]): Promise<void> {
+  await callJson(`/api/weekly/db/${dbId}`, {
+    method: 'PATCH', headers: headers(), body: JSON.stringify({ viewId, columnIds }),
+  }, 'Column order update failed');
 }
 
 export async function patchDbSchema(

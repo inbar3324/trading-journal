@@ -14,7 +14,7 @@ import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 import {
   pullDb, patchDbSchema, createPage as apiCreatePage,
   updatePage as apiUpdatePage, archivePage as apiArchivePage,
-  notionTypeToWColType, safeJson,
+  notionTypeToWColType, safeJson, reorderColumns as apiReorderColumns,
 } from '@/lib/weekly-sync-client';
 import { colToSchemaEntry } from '@/lib/weekly-notion';
 
@@ -175,38 +175,47 @@ export default function WeeklySummaryPage() {
   const storeRef = useRef<WStore | null>(null);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
   const pendingRef = useRef(0);
+  const mutationVersionRef = useRef(0);
+  const pullRequestRef = useRef(0);
+  const afterQueueRef = useRef<() => Promise<unknown>>(async () => {});
+  const pendingPagesRef = useRef(new Map<string, number>());
   const addRowBtnRef = useRef<HTMLTableRowElement>(null);
-
-  useEffect(() => { storeRef.current = store; }, [store]);
 
   // Initial load
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       const s = raw ? JSON.parse(raw) as WStore : emptyStore();
+      storeRef.current = s;
       setStore(s);
       setSyncStatus(s.notion ? 'idle' : 'offline');
     } catch {
-      setStore(emptyStore());
+      const s = emptyStore();
+      storeRef.current = s;
+      setStore(s);
     }
   }, []);
 
   function upd(fn: (s: WStore) => WStore) {
-    setStore(prev => {
-      if (!prev) return prev;
-      const next = fn(prev);
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+    const prev = storeRef.current;
+    if (!prev) return;
+    const next = fn(prev);
+    mutationVersionRef.current += 1;
+    storeRef.current = next;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch {}
+    setStore(next);
   }
 
   // ── Sync queue ──────────────────────────────────────────────────────────────
   const enqueue = useCallback((fn: () => Promise<void>) => {
+    mutationVersionRef.current += 1;
     pendingRef.current += 1;
     setSyncStatus('syncing');
     queueRef.current = queueRef.current.then(async () => {
+      let succeeded = false;
       try {
         await fn();
+        succeeded = true;
         setSyncError('');
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Sync error';
@@ -215,81 +224,47 @@ export default function WeeklySummaryPage() {
       } finally {
         pendingRef.current -= 1;
         if (pendingRef.current === 0) {
-          setSyncStatus(prev => prev === 'error' ? 'error' : 'idle');
+          if (succeeded) await afterQueueRef.current();
+          if (pendingRef.current === 0) {
+            setSyncStatus(prev => prev === 'error' ? 'error' : pendingPagesRef.current.size ? 'syncing' : 'idle');
+          }
         }
       }
     });
   }, []);
 
   // ── Pull & reconcile ────────────────────────────────────────────────────────
-  const pullAndReconcile = useCallback(async () => {
+  const pullAndReconcile = useCallback(async (options?: { force?: boolean; expectedPageId?: string }): Promise<boolean> => {
     const cur = storeRef.current;
-    if (!cur?.notion) return;
-    if (pendingRef.current > 0) return; // skip pull while pushing
+    if (!cur?.notion) return false;
+    if (pendingRef.current > 0 && !options?.force) return false;
+    const requestId = ++pullRequestRef.current;
+    const mutationVersion = mutationVersionRef.current;
     try {
-      const { schema, pages: nPages, orderFromView } = await pullDb(cur.notion.dbId);
-      setStore(prev => {
-        if (!prev?.notion) return prev;
+      const { schema, pages: nPages, viewId } = await pullDb(cur.notion.dbId, cur.notion.viewId);
+      if (requestId !== pullRequestRef.current || mutationVersion !== mutationVersionRef.current ||
+          cur.notion.dbId !== storeRef.current?.notion?.dbId) return false;
+      const expectedVisible = !options?.expectedPageId || nPages.some(page => page.id === options.expectedPageId);
+      {
+        const prev = storeRef.current;
+        if (!prev?.notion) return false;
         const localByPropId = new Map(
           prev.columns.filter(c => c.notionPropId).map(c => [c.notionPropId!, c] as const),
         );
 
-        // Column order:
-        //  - If we already have local synced columns, preserve local order (supports user
-        //    drag-to-reorder). New Notion props get appended at the end.
-        //  - On first pull (no local synced cols), use Notion's view order or alphabetical.
         const synced: WColumn[] = [];
-        const seenPropIds = new Set<string>();
-        const hasLocalSynced = prev.columns.some(c => c.notionPropId);
-
-        if (hasLocalSynced) {
-          for (const local of prev.columns) {
-            if (local.notionPropId) {
-              const np = schema.properties.find(p => p.id === local.notionPropId);
-              if (!np) continue; // column was deleted in Notion
-              const wType = notionTypeToWColType(np.type);
-              if (!wType) continue;
-              const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
-              synced.push({ ...local, notionType: np.type, name: np.name, type: wType, options: opts });
-              seenPropIds.add(np.id);
-            } else {
-              synced.push(local);
-            }
-          }
-          for (const np of schema.properties) {
-            if (seenPropIds.has(np.id)) continue;
-            const wType = notionTypeToWColType(np.type);
-            if (!wType) continue;
-            const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
-            synced.push({ id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
-          }
-        } else {
-          let ordered: NotionPropDef[];
-          if (orderFromView) {
-            const titleIdx = schema.properties.findIndex(p => p.type === 'title');
-            ordered = titleIdx > 0
-              ? [schema.properties[titleIdx], ...schema.properties.filter((_, i) => i !== titleIdx)]
-              : schema.properties;
-          } else {
-            ordered = [...schema.properties].sort((a, b) => {
-              if (a.type === 'title') return -1;
-              if (b.type === 'title') return 1;
-              return a.name.localeCompare(b.name);
-            });
-          }
-          for (const np of ordered) {
-            const wType = notionTypeToWColType(np.type);
-            if (!wType) continue;
-            const opts = np.options?.map(o => ({ name: o.name, color: (o.color ?? 'default') as string }));
-            const local = localByPropId.get(np.id);
-            synced.push(local
-              ? { ...local, notionType: np.type, name: np.name, type: wType, options: opts }
-              : { id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
-          }
-          for (const c of prev.columns) if (!c.notionPropId) synced.push(c);
+        for (const np of schema.properties) {
+          const wType = notionTypeToWColType(np.type);
+          if (!wType) continue;
+          const opts = np.options?.map(o => ({ name: o.name, color: o.color ?? 'default' }));
+          const local = localByPropId.get(np.id);
+          synced.push(local
+            ? { ...local, notionType: np.type, name: np.name, type: wType, options: opts }
+            : { id: uid('col'), notionPropId: np.id, notionType: np.type, name: np.name, type: wType, options: opts });
         }
+        for (const c of prev.columns) if (!c.notionPropId) synced.push(c);
 
-        // Follow Notion's row order (created_time ascending from query).
+        // Follow the exact order returned by the selected Notion view.
         const localByPageId = new Map(
           prev.rows.filter(r => r.notionPageId).map(r => [r.notionPageId!, r] as const),
         );
@@ -305,18 +280,47 @@ export default function WeeklySummaryPage() {
         }
         // Append local-only rows (pending Notion creation) at bottom.
         for (const r of prev.rows.filter(r => !r.notionPageId)) newRows.push(r);
+        const visibleIds = new Set(nPages.map(page => page.id));
+        for (const [pageId, createdAt] of pendingPagesRef.current) {
+          if (visibleIds.has(pageId) || Date.now() - createdAt > 30_000) {
+            pendingPagesRef.current.delete(pageId);
+          } else {
+            const pendingCreated = prev.rows.find(r => r.notionPageId === pageId);
+            if (pendingCreated) newRows.push(pendingCreated);
+          }
+        }
 
-        const next = { ...prev, columns: synced, rows: newRows };
+        const next = {
+          ...prev,
+          notion: { ...prev.notion, viewId },
+          columns: synced,
+          rows: newRows,
+        };
+        storeRef.current = next;
         try { localStorage.setItem(STORE_KEY, JSON.stringify(next)); } catch {}
-        return next;
-      });
+        setStore(next);
+      }
       setSyncError('');
-      setSyncStatus(s => s === 'syncing' ? s : 'idle');
+      setSyncStatus(pendingRef.current > 0 || pendingPagesRef.current.size ? 'syncing' : 'idle');
+      return expectedVisible;
     } catch (e) {
+      if (requestId !== pullRequestRef.current || mutationVersion !== mutationVersionRef.current) return false;
       setSyncError(e instanceof Error ? e.message : 'Pull failed');
       setSyncStatus('error');
+      return false;
     }
   }, []);
+
+  afterQueueRef.current = () => pullAndReconcile();
+
+  const reconcileCreatedPage = useCallback(async (pageId: string) => {
+    const delays = [0, 350, 800, 1600, 3000];
+    for (const delay of delays) {
+      if (pendingRef.current > 1) return;
+      if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+      if (await pullAndReconcile({ force: true, expectedPageId: pageId })) return;
+    }
+  }, [pullAndReconcile]);
 
   // Polling
   useEffect(() => {
@@ -427,25 +431,24 @@ export default function WeeklySummaryPage() {
         const latest = storeRef.current;
         if (!latest?.notion) return;
         const latestRow = latest.rows.find(r => r.id === id);
-        const sendCells = latestRow?.cells ?? cells;
+        if (!latestRow) return;
+        const sendCells = latestRow.cells;
         const { page } = await apiCreatePage(latest.notion.dbId, latest.columns, sendCells);
-        // Mirror JOURNAL: attach notionPageId AND server cells in one shot.
-        // The next 15s poll (or any explicit refresh) will fold this row into
-        // Notion's view order. We do NOT force-pull here — Notion has eventual
-        // consistency on data_sources queries, so an immediate pull might miss
-        // the just-created page and either drop or duplicate the row.
+        if (!storeRef.current?.rows.some(r => r.id === id)) {
+          await apiArchivePage(page.id);
+          return;
+        }
+        pendingPagesRef.current.set(page.id, Date.now());
         upd(s => ({
           ...s,
-          rows: s.rows.map(r => {
-            if (r.id !== id) return r;
-            const cellsFromServer: Record<string, NotionPropValue> = {};
-            for (const col of s.columns) {
-              const v = (page.properties as Record<string, NotionPropValue>)[col.name];
-              cellsFromServer[col.id] = v ?? r.cells[col.id] ?? defaultCell(col.type);
-            }
-            return { ...r, notionPageId: page.id, cells: cellsFromServer };
-          }),
+          rows: s.rows.map(r => r.id === id ? { ...r, notionPageId: page.id } : r),
         }));
+        const current = storeRef.current!;
+        const currentRow = current.rows.find(r => r.id === id)!;
+        const changedCells = Object.fromEntries(Object.entries(currentRow.cells)
+          .filter(([colId, value]) => JSON.stringify(value) !== JSON.stringify(sendCells[colId])));
+        if (Object.keys(changedCells).length) await apiUpdatePage(page.id, current.columns, changedCells);
+        await reconcileCreatedPage(page.id);
       });
     }
   }
@@ -460,6 +463,13 @@ export default function WeeklySummaryPage() {
       cols.splice(to, 0, item);
       return { ...s, columns: cols };
     });
+    if (storeRef.current?.notion) {
+      enqueue(async () => {
+        const cur = storeRef.current;
+        if (!cur?.notion) return;
+        await apiReorderColumns(cur.notion.dbId, cur.notion.viewId, cur.columns.flatMap(c => c.notionPropId ? [c.notionPropId] : []));
+      });
+    }
   }
 
   function reorderRows(fromId: string, toId: string) {
@@ -516,7 +526,7 @@ export default function WeeklySummaryPage() {
         const latest = storeRef.current;
         const latestRow = latest?.rows.find(r => r.id === rowId);
         if (!latest || !latestRow?.notionPageId) return;
-        await apiUpdatePage(latestRow.notionPageId, latest.columns, latestRow.cells);
+        await apiUpdatePage(latestRow.notionPageId, latest.columns, { [colId]: value });
       });
     }
   }
@@ -665,6 +675,7 @@ export default function WeeklySummaryPage() {
 
   const cols = store.columns;
   const rows = store.rows;
+  const rowDragEnabled = !store.notion;
   const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 44 + 28;
   const isConnected = !!store.notion;
 
@@ -882,8 +893,8 @@ export default function WeeklySummaryPage() {
               <tr
                 key={row.id}
                 onMouseEnter={() => setHoveredRow(row.id)} onMouseLeave={() => setHoveredRow(null)}
-                onDragOver={e => { e.preventDefault(); setDragOverRowId(row.id); }}
-                onDrop={() => { if (dragRowId && dragRowId !== row.id) reorderRows(dragRowId, row.id); setDragOverRowId(null); }}
+                onDragOver={rowDragEnabled ? e => { e.preventDefault(); setDragOverRowId(row.id); } : undefined}
+                onDrop={rowDragEnabled ? () => { if (dragRowId && dragRowId !== row.id) reorderRows(dragRowId, row.id); setDragOverRowId(null); } : undefined}
                 style={{
                   borderBottom: '1px solid var(--border-color)',
                   background: dragOverRowId === row.id
@@ -894,17 +905,17 @@ export default function WeeklySummaryPage() {
                 }}
               >
                 <td
-                  draggable
-                  onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragRowId(row.id); }}
-                  onDragEnd={() => { setDragRowId(null); setDragOverRowId(null); }}
+                  draggable={rowDragEnabled}
+                  onDragStart={rowDragEnabled ? e => { e.dataTransfer.effectAllowed = 'move'; setDragRowId(row.id); } : undefined}
+                  onDragEnd={rowDragEnabled ? () => { setDragRowId(null); setDragOverRowId(null); } : undefined}
                   style={{
                     width: 28, minWidth: 28, textAlign: 'center', verticalAlign: 'middle',
                     borderRight: '1px solid var(--border-color)',
-                    cursor: 'grab', color: 'var(--text-muted)', fontSize: 14,
-                    opacity: hoveredRow === row.id ? 0.6 : 0,
+                    cursor: rowDragEnabled ? 'grab' : 'default', color: 'var(--text-muted)', fontSize: 14,
+                    opacity: rowDragEnabled && hoveredRow === row.id ? 0.6 : 0,
                     transition: 'opacity 120ms', userSelect: 'none',
                   }}
-                >⠿</td>
+                >{rowDragEnabled ? '⠿' : ''}</td>
                 {cols.map(col => (
                   <td
                     key={col.id}
