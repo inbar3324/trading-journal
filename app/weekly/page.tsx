@@ -7,7 +7,7 @@ import {
   filterByDateRange, toISODate, getWeekStart,
   getDateRangeBounds, DATE_RANGE_LABELS, type DateRange,
 } from '@/lib/utils';
-import { getNotionConfig, notionHeaders, saveNotionConfig } from '@/lib/notion-config';
+import { useTrades } from '@/lib/use-trades';
 
 const PRESETS: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', '3_months', 'this_year', 'all'];
 
@@ -69,8 +69,7 @@ function addDays(date: Date, days: number): Date {
 }
 
 export default function WeeklyPage() {
-  const [allTrades, setAllTrades]           = useState<Trade[]>([]);
-  const [loading, setLoading]               = useState(true);
+  const { allTrades, loading, error, syncError } = useTrades();
   const [mode, setMode]                     = useState<'preset' | 'custom'>('preset');
   const [range, setRange]                   = useState<DateRange>('last_week');
   const [customFrom, setCustomFrom]         = useState('');
@@ -83,17 +82,6 @@ export default function WeeklyPage() {
   const [showTrades, setShowTrades]         = useState(false);
   const [noTradesNotes, setNoTradesNotes]   = useState('');
   const [noTradesReasons, setNoTradesReasons] = useState<string[]>([]);
-
-  useEffect(() => {
-    fetch('/api/trades', { headers: notionHeaders(getNotionConfig()) })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setAllTrades(data.trades);
-        if (data.fieldMap) { const cfg = getNotionConfig(); if (cfg) saveNotionConfig({ ...cfg, fieldMap: data.fieldMap }); }
-      })
-      .finally(() => setLoading(false));
-  }, []);
 
   // Filtered actual trades for the selected period
   const periodTrades = useMemo(() => {
@@ -225,6 +213,8 @@ export default function WeeklyPage() {
     await callSummary({ trades: periodTrades, journalEntries: journal, weekStart: periodStart, weekEnd: periodEnd, freeNotes, historicalTrades });
   }
 
+  if (error) return <div role="alert" className="p-6">{error}</div>;
+
   if (loading) {
     return (
       <div className="p-6 space-y-5">
@@ -248,6 +238,7 @@ export default function WeeklyPage() {
 
   return (
     <div className="p-6 space-y-5">
+      {syncError && <div role="status" style={{ color: 'var(--yellow)', fontSize: 12 }}>Showing saved data — sync failed. {syncError}</div>}
 
       {/* Header */}
       <div className="pb-1" style={{ borderBottom: '1px solid var(--border-color)' }}>

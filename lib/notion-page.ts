@@ -489,6 +489,7 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
 
   // Primary: data source query (new API)
   let cursor: string | undefined;
+  let primaryFailed = false;
   try {
     do {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -508,10 +509,13 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
       }
       cursor = (res.next_cursor as string | null) ?? undefined;
     } while (cursor);
-  } catch { /* try fallback */ }
+  } catch (error) {
+    if (pageMap.size > 0) throw error;
+    primaryFailed = true;
+  }
 
   // Fallback: direct DB query
-  if (pageMap.size === 0) {
+  if (primaryFailed) {
     let dbCursor: string | undefined;
     try {
       do {
@@ -523,7 +527,7 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
         const res = await fetch(`https://api.notion.com/v1/databases/${dataSourceId}/query`, {
           method: 'POST', headers, body: JSON.stringify(body),
         });
-        if (!res.ok) break;
+        if (!res.ok) throw new Error(`Failed to load Journal rows (${res.status})`);
         const data = await res.json() as Record<string, unknown>;
         const results = (data.results as Array<Record<string, unknown>>) ?? [];
         for (const r of results) {
@@ -533,7 +537,7 @@ export async function getAllPages(creds?: { key?: string; dbId?: string }): Prom
         }
         dbCursor = (data.next_cursor as string | null) ?? undefined;
       } while (dbCursor);
-    } catch { /* ignore */ }
+    } catch (error) { throw error; }
   }
 
   // Resolve realDbId

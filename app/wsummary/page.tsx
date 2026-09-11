@@ -8,7 +8,7 @@ import { EditableCell } from '@/components/journal/v2/EditableCell';
 import { colWidth } from '@/components/journal/v2/widths';
 import { TypeSelector } from '@/components/weekly/TypeSelector';
 import type { WColumn, WRow, WStore, WColType } from '@/lib/weekly-types';
-import { NotebookView } from '@/components/journal/notebook/NotebookView';
+import dynamic from 'next/dynamic';
 import { wstoreToNotebook } from '@/components/journal/notebook/wstoreAdapter';
 import { getNotionConfig, notionHeaders } from '@/lib/notion-config';
 import {
@@ -17,6 +17,8 @@ import {
   notionTypeToWColType, safeJson, reorderColumns as apiReorderColumns,
 } from '@/lib/weekly-sync-client';
 import { colToSchemaEntry } from '@/lib/weekly-notion';
+
+const NotebookView = dynamic(() => import('@/components/journal/notebook/NotebookView').then(m => m.NotebookView));
 
 const STORE_KEY = 'tj_wsummary';
 
@@ -148,7 +150,6 @@ function ColumnHeader({
 
 export default function WeeklySummaryPage() {
   const [store, setStore] = useState<WStore | null>(null);
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [dragRowId, setDragRowId] = useState<string | null>(null);
   const [dragOverRowId, setDragOverRowId] = useState<string | null>(null);
   const [dragColId, setDragColId] = useState<string | null>(null);
@@ -676,7 +677,7 @@ export default function WeeklySummaryPage() {
   const cols = store.columns;
   const rows = store.rows;
   const rowDragEnabled = !store.notion;
-  const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 44 + 28;
+  const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 32 + 28;
   const isConnected = !!store.notion;
 
   // ── Notebook adapter (memoized would be nice but cheap to recompute) ───────
@@ -826,6 +827,7 @@ export default function WeeklySummaryPage() {
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: minW }}>
           <thead>
             <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-color)' }}>
+              <th style={{ width: 32, minWidth: 32 }} />
               <th style={{ width: 28, minWidth: 28, borderRight: '1px solid var(--border-color)' }} />
               {cols.map(col => (
                 <th
@@ -875,14 +877,13 @@ export default function WeeklySummaryPage() {
                   />
                 </th>
               ))}
-              <th style={{ width: 44 }} />
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={cols.length + 1}
+                  colSpan={cols.length + 2}
                   style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 16px', fontSize: 13 }}
                 >
                   No rows yet — click &quot;+ New row&quot; to get started
@@ -892,19 +893,32 @@ export default function WeeklySummaryPage() {
             {rows.map(row => (
               <tr
                 key={row.id}
-                onMouseEnter={() => setHoveredRow(row.id)} onMouseLeave={() => setHoveredRow(null)}
+                className="journal-data-row"
                 onDragOver={rowDragEnabled ? e => { e.preventDefault(); setDragOverRowId(row.id); } : undefined}
                 onDrop={rowDragEnabled ? () => { if (dragRowId && dragRowId !== row.id) reorderRows(dragRowId, row.id); setDragOverRowId(null); } : undefined}
                 style={{
                   borderBottom: '1px solid var(--border-color)',
                   background: dragOverRowId === row.id
                     ? 'rgba(59,130,246,0.07)'
-                    : hoveredRow === row.id ? 'rgba(255,255,255,0.018)' : 'transparent',
+                    : undefined,
                   opacity: dragRowId === row.id ? 0.4 : 1,
                   transition: 'background 80ms',
                 }}
               >
+                <td style={{ width: 32, minWidth: 32, textAlign: 'center', verticalAlign: 'middle' }}>
+                  <button
+                    onClick={() => deleteRow(row.id)} title="Delete row" aria-label="Delete row" className="row-trash"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-muted)', padding: 4, borderRadius: 4,
+                      transition: 'opacity 120ms',
+                    }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </td>
                 <td
+                  className="row-drag"
                   draggable={rowDragEnabled}
                   onDragStart={rowDragEnabled ? e => { e.dataTransfer.effectAllowed = 'move'; setDragRowId(row.id); } : undefined}
                   onDragEnd={rowDragEnabled ? () => { setDragRowId(null); setDragOverRowId(null); } : undefined}
@@ -912,7 +926,6 @@ export default function WeeklySummaryPage() {
                     width: 28, minWidth: 28, textAlign: 'center', verticalAlign: 'middle',
                     borderRight: '1px solid var(--border-color)',
                     cursor: rowDragEnabled ? 'grab' : 'default', color: 'var(--text-muted)', fontSize: 14,
-                    opacity: rowDragEnabled && hoveredRow === row.id ? 0.6 : 0,
                     transition: 'opacity 120ms', userSelect: 'none',
                   }}
                 >{rowDragEnabled ? '⠿' : ''}</td>
@@ -933,23 +946,10 @@ export default function WeeklySummaryPage() {
                     />
                   </td>
                 ))}
-                <td style={{ width: 44, textAlign: 'center', verticalAlign: 'middle' }}>
-                  <button
-                    onClick={() => deleteRow(row.id)} title="Delete row"
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--text-muted)', padding: 4, borderRadius: 4,
-                      opacity: hoveredRow === row.id ? 0.7 : 0,
-                      transition: 'opacity 120ms',
-                    }}
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </td>
               </tr>
             ))}
             <tr ref={addRowBtnRef}>
-              <td colSpan={cols.length + 1} style={{ padding: '3px 6px' }}>
+              <td colSpan={cols.length + 2} style={{ padding: '3px 6px' }}>
                 <button
                   onClick={addRow}
                   style={{

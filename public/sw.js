@@ -1,4 +1,4 @@
-const CACHE = 'tj-v1';
+const CACHE = 'tj-v2';
 const STATIC = ['/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
 
 self.addEventListener('install', (e) => {
@@ -21,6 +21,21 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
   if (e.request.method !== 'GET') return;
+
+  if (url.pathname.startsWith('/_next/static/')) {
+    e.respondWith(
+      caches.open(CACHE).then(async (cache) => {
+        const hit = await cache.match(e.request);
+        if (hit) return hit;
+        const res = await fetch(e.request);
+        if (res.ok && res.headers.get('Cache-Control')?.includes('immutable')) {
+          await cache.put(e.request, res.clone());
+        }
+        return res;
+      })
+    );
+    return;
+  }
 
   if (STATIC.includes(url.pathname)) {
     e.respondWith(

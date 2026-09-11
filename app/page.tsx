@@ -14,31 +14,13 @@ import {
 import KpiCard from '@/components/ui/KpiCard';
 import PnlChart from '@/components/charts/PnlChart';
 import { AlertTriangle } from 'lucide-react';
-import { getNotionConfig, notionHeaders, saveNotionConfig } from '@/lib/notion-config';
+import { useTrades } from '@/lib/use-trades';
 
 const RANGES: DateRange[] = ['today', 'this_week', 'last_week', 'this_month', 'last_month', '3_months', 'this_year', 'all'];
 
 export default function DashboardPage() {
-  const [allTrades, setAllTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { allTrades, loading, error, syncError } = useTrades();
   const [range, setRange] = useState<DateRange>('last_week');
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000);
-    fetch('/api/trades', { signal: controller.signal, headers: notionHeaders(getNotionConfig()) })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setAllTrades(data.trades);
-        if (data.fieldMap) { const cfg = getNotionConfig(); if (cfg) saveNotionConfig({ ...cfg, fieldMap: data.fieldMap }); }
-      })
-      .catch((e: Error) => setError(
-        e.name === 'AbortError' ? 'הבקשה לקחה יותר מדי זמן — נסה לרענן' : e.message
-      ))
-      .finally(() => { clearTimeout(timer); setLoading(false); });
-  }, []);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
@@ -53,6 +35,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-5">
+      {syncError && <div role="status" style={{ color: 'var(--yellow)', fontSize: 12 }}>Showing saved data — sync failed. {syncError}</div>}
       {/* Header */}
       <div className="flex items-center justify-between pb-1" style={{ borderBottom: '1px solid var(--border-color)' }}>
         <div>

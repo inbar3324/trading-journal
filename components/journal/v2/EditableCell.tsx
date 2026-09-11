@@ -242,7 +242,7 @@ function DisplayValue({ value, onImageClick }: { value: NotionPropValue; onImage
         <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
           {value.files.slice(0, 3).map((f, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={f.url} alt="" onClick={onImageClick ? (e) => { e.stopPropagation(); onImageClick(i); } : undefined}
+            <img key={i} loading="lazy" decoding="async" src={f.url} alt="" onClick={onImageClick ? (e) => { e.stopPropagation(); onImageClick(i); } : undefined}
               style={{ width: 28, height: 22, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border-color)', cursor: onImageClick ? 'zoom-in' : 'default' }} />
           ))}
           {value.files.length > 3 && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>+{value.files.length - 3}</span>}
@@ -746,7 +746,7 @@ function FileUploader({
           {value.map((f, i) => (
             <div key={i} style={{ position: 'relative', width: 40, height: 30 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={f.url} alt=""
+              <img loading="lazy" decoding="async" src={f.url} alt=""
                 style={{ width: 40, height: 30, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border-color)', opacity: deletingIdx === i ? 0.4 : 1 }} />
               {onDeleteFile && (
                 <button onClick={() => handleDelete(i)} disabled={deletingIdx !== null}

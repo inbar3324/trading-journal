@@ -18,7 +18,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="fixed left-0 w-[220px] hidden md:flex flex-col"
+      className="fixed left-0 w-[220px] hidden md:flex flex-col overflow-hidden isolate"
       style={{
         top: 'calc(48px + env(safe-area-inset-top))',
         height: 'calc(100% - 48px - env(safe-area-inset-top))',
@@ -26,8 +26,9 @@ export default function Sidebar() {
         borderRight: '1px solid var(--sidebar-border)',
       }}
     >
+      <div className="sidebar-art" aria-hidden="true" />
       {/* Nav */}
-      <nav className="flex-1 px-3 py-5">
+      <nav className="sidebar-navigation flex-1 px-3 py-5">
         <div
           className="px-3 mb-3"
           style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--sidebar-text-muted)' }}
@@ -68,7 +69,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 flex flex-col gap-2" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
+      <div className="sidebar-footer px-4 py-4 flex flex-col gap-2" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
         <Link
           href="/install"
           className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm"

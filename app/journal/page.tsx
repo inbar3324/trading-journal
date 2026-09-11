@@ -6,7 +6,10 @@ import type { NotionPage, NotionDbSchema, NotionPropDef, NotionPropValue } from 
 import { getNotionConfig, saveNotionConfig, notionHeaders } from '@/lib/notion-config';
 import { EditableCell } from '@/components/journal/v2/EditableCell';
 import { colWidth } from '@/components/journal/v2/widths';
-import { NotebookView } from '@/components/journal/notebook/NotebookView';
+import dynamic from 'next/dynamic';
+import { fetchJournalSnapshot, invalidateJournalSnapshot, readJournalSnapshot, writeJournalSnapshot } from '@/lib/journal-cache';
+
+const NotebookView = dynamic(() => import('@/components/journal/notebook/NotebookView').then(m => m.NotebookView));
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -74,9 +77,13 @@ export default function JournalPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<string>('table');
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, NotionPropValue> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cacheEpoch, setCacheEpoch] = useState(0);
+  const readyRef = useRef(false);
+  const pendingMutationsRef = useRef(0);
+  const mutationVersionRef = useRef(0);
+  const fetchingRef = useRef(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const draftRowRef = useRef<HTMLTableRowElement>(null);
   const deletedIdsRef = useRef<Set<string>>(new Set());
@@ -86,16 +93,19 @@ export default function JournalPage() {
 
   // â”€â”€ Fetch pages + schema â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchAll = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true); else setRefreshing(true);
+    if (fetchingRef.current || pendingMutationsRef.current) return;
+    const config = getNotionConfig();
+    if (!config) return;
+    const version = mutationVersionRef.current;
+    fetchingRef.current = true;
+    if (!silent && !readyRef.current) setLoading(true); else setRefreshing(true);
     try {
-      const sh: Record<string, string> = { ...headers };
-      if (realDbId) sh['x-notion-realdb'] = realDbId;
-      const res = await fetch('/api/notion/pages', { headers: sh });
-      const data = await readJson(res);
-      if (data.error) throw new Error(String(data.error));
+      const data = await fetchJournalSnapshot(config);
+      if (version !== mutationVersionRef.current || pendingMutationsRef.current) return;
       // Drop rows we've archived locally but Notion's query may not reflect yet (eventual consistency).
       setPages((data.pages as NotionPage[]).filter(p => !deletedIdsRef.current.has(p.id)));
       setSchema(data.schema as NotionDbSchema);
+      readyRef.current = true;
       if (data.realDbId) {
         setRealDbId(data.realDbId);
         const cfg = getNotionConfig();
@@ -103,18 +113,52 @@ export default function JournalPage() {
       }
       setError(null);
     } catch (e) {
-      if (!silent) setError(e instanceof Error ? e.message : 'Failed to load');
-    } finally { setLoading(false); setRefreshing(false); }
-  }, [headers, realDbId]);
+      if (version === mutationVersionRef.current && !(e instanceof DOMException && e.name === 'AbortError')) {
+        setError(e instanceof Error ? e.message : 'Failed to load');
+      }
+    } finally { fetchingRef.current = false; setLoading(false); setRefreshing(false); }
+  }, []);
 
   useEffect(() => {
-    fetchAll();
-    pollRef.current = setInterval(() => fetchAll(true), 15_000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    let active = true;
+    const config = getNotionConfig();
+    (async () => {
+      const cached = config ? await readJournalSnapshot(config) : null;
+      if (!active) return;
+      if (cached) {
+        setPages(cached.pages);
+        setSchema(cached.schema);
+        setRealDbId(cached.realDbId);
+        readyRef.current = true;
+        setLoading(false);
+      }
+      fetchAll(Boolean(cached));
+    })();
+    pollRef.current = setInterval(() => { if (!document.hidden) fetchAll(true); }, 15_000);
+    return () => { active = false; if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchAll]);
+
+  const beginMutation = useCallback(() => {
+    pendingMutationsRef.current++;
+    mutationVersionRef.current++;
+    invalidateJournalSnapshot();
+  }, []);
+
+  const endMutation = useCallback(() => {
+    pendingMutationsRef.current--;
+    setCacheEpoch(epoch => epoch + 1);
+  }, []);
+
+  useEffect(() => {
+    const config = getNotionConfig();
+    if (cacheEpoch && config && readyRef.current && !pendingMutationsRef.current) {
+      void writeJournalSnapshot(config, { pages, schema, realDbId: realDbId ?? schema.realDbId });
+    }
+  }, [cacheEpoch, pages, schema, realDbId]);
 
   // â”€â”€ Edit a cell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const commitEdit = useCallback(async (pageId: string, propName: string, next: NotionPropValue) => {
+    beginMutation();
     const prev = pages;
     // Optimistic
     setPages(curr => curr.map(p => p.id === pageId
@@ -135,8 +179,8 @@ export default function JournalPage() {
       console.error('[edit] failed', e);
       setPages(prev); // rollback
       alert(e instanceof Error ? e.message : 'Save failed');
-    }
-  }, [headers, pages]);
+    } finally { endMutation(); }
+  }, [headers, pages, beginMutation, endMutation]);
 
   // â”€â”€ Inline new row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startInline = () => setDraft(emptyPage(schema));
@@ -148,6 +192,7 @@ export default function JournalPage() {
 
   const commitInline = useCallback(async () => {
     if (!draft) return;
+    beginMutation();
     setSaving(true);
     try {
       const patch: Record<string, NotionPropValue> = {};
@@ -175,8 +220,8 @@ export default function JournalPage() {
       setDraft(null);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Create failed');
-    } finally { setSaving(false); }
-  }, [draft, headers, realDbId]);
+    } finally { setSaving(false); endMutation(); }
+  }, [draft, headers, realDbId, beginMutation, endMutation]);
 
   // Auto-save draft on click outside the draft row
   useEffect(() => {
@@ -193,6 +238,7 @@ export default function JournalPage() {
   // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function archiveRow(pageId: string) {
     if (!confirm('Move this row to trash?')) return;
+    beginMutation();
     const prev = pages;
     deletedIdsRef.current.add(pageId);
     setPages(curr => curr.filter(p => p.id !== pageId));
@@ -204,11 +250,13 @@ export default function JournalPage() {
       deletedIdsRef.current.delete(pageId);
       setPages(prev);
       alert(e instanceof Error ? e.message : 'Delete failed');
-    }
+    } finally { endMutation(); }
   }
 
   // â”€â”€ File upload (for files-type cells) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const uploadFile = useCallback(async (pageId: string, propName: string, file: File) => {
+    beginMutation();
+    try {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('prop', propName);
@@ -216,16 +264,20 @@ export default function JournalPage() {
     const data = await readJson(res);
     if (data.error) throw new Error(data.error);
     if (data.page) setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
-  }, [headers]);
+    } finally { endMutation(); }
+  }, [headers, beginMutation, endMutation]);
 
   const deleteFile = useCallback(async (pageId: string, propName: string, index: number) => {
+    beginMutation();
+    try {
     const res = await fetch(`/api/notion/pages/${pageId}/file?prop=${encodeURIComponent(propName)}&index=${index}`, {
       method: 'DELETE', headers,
     });
     const data = await readJson(res);
     if (data.error) throw new Error(data.error);
     if (data.page) setPages(curr => curr.map(p => p.id === pageId ? (data.page as NotionPage) : p));
-  }, [headers]);
+    } finally { endMutation(); }
+  }, [headers, beginMutation, endMutation]);
 
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loading) {
@@ -240,7 +292,7 @@ export default function JournalPage() {
     );
   }
 
-  if (error) {
+  if (error && !readyRef.current) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <div style={{ textAlign: 'center' }}>
@@ -259,7 +311,8 @@ export default function JournalPage() {
   const tableMin = cols.reduce((s, c) => s + colWidth(c.type), 0) + 36; // +36 for action col
 
   const CELL: React.CSSProperties = {
-    padding: '7px 10px',
+    padding: '12px 16px',
+    height: 64,
     borderBottom: '1px solid var(--border-color)',
     borderRight: '1px solid var(--border-color)',
     verticalAlign: 'middle',
@@ -324,6 +377,12 @@ export default function JournalPage() {
         </div>
       </div>
 
+      {error && (
+        <div role="status" style={{ padding: '8px 32px', color: 'var(--yellow)', fontSize: 12 }}>
+          Showing saved data — sync failed. {error}
+        </div>
+      )}
+
       {activeView === 'notebook' ? (
         <NotebookView pages={pages} schema={schema} dbId={realDbId ?? schema.realDbId ?? ''} />
       ) : activeView !== 'table' ? (
@@ -342,6 +401,7 @@ export default function JournalPage() {
             <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: tableMin }}>
               <thead>
                 <tr>
+                  <th style={{ ...TH_BASE, width: 36, minWidth: 36 }} />
                   {cols.map(col => (
                     <th key={col.id} style={{
                       ...TH_BASE,
@@ -351,17 +411,26 @@ export default function JournalPage() {
                       {col.name}
                     </th>
                   ))}
-                  <th style={{ ...TH_BASE, width: 36, minWidth: 36 }} />
                 </tr>
               </thead>
 
               <tbody>
                 {pages.map(page => (
                   <tr key={page.id}
-                    onMouseEnter={() => setHoveredId(page.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                    style={{ background: hoveredId === page.id ? 'rgba(255,255,255,0.025)' : 'transparent' }}
+                    className="journal-data-row"
                   >
+                    <td style={{ ...CELL, width: 36, minWidth: 36, textAlign: 'center' }}>
+                      <button onClick={() => archiveRow(page.id)}
+                        title="Move to trash" aria-label="Move row to trash" className="row-trash"
+                        style={{
+                          width: 22, height: 22, padding: 0, border: 'none', background: 'transparent',
+                          color: 'var(--text-muted)', cursor: 'pointer', borderRadius: 3,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
                     {cols.map(col => {
                       const value = page.properties[col.name] ?? emptyValue(col.type);
                       const w = colWidth(col.type);
@@ -380,25 +449,13 @@ export default function JournalPage() {
                         </td>
                       );
                     })}
-                    <td style={{ ...CELL, width: 36, minWidth: 36, textAlign: 'center' }}>
-                      <button onClick={() => archiveRow(page.id)}
-                        title="Move to trash"
-                        style={{
-                          width: 22, height: 22, padding: 0, border: 'none', background: 'transparent',
-                          color: 'var(--text-muted)', cursor: 'pointer', borderRadius: 3,
-                          opacity: hoveredId === page.id ? 1 : 0,
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
                   </tr>
                 ))}
 
                 {/* Inline new-row */}
                 {draft && (
                   <tr ref={draftRowRef} style={{ background: 'rgba(59,130,246,0.05)' }}>
+                    <td style={{ ...CELL, width: 36, minWidth: 36 }} />
                     {cols.map((col, idx) => {
                       const w = colWidth(col.type);
                       const value = draft[col.name] ?? emptyValue(col.type);
@@ -417,7 +474,6 @@ export default function JournalPage() {
                         </td>
                       );
                     })}
-                    <td style={{ ...CELL, width: 36, minWidth: 36 }} />
                   </tr>
                 )}
 

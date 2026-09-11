@@ -460,6 +460,7 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
 
   const tradeMap = new Map<string, Trade>();
   let cursor: string | undefined;
+  let primaryFailed = false;
   let firstPage: Record<string, unknown> | undefined;
   let fieldMap: FieldMap | undefined;
 
@@ -485,12 +486,13 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
       }
       cursor = (res.next_cursor as string | null) ?? undefined;
     } while (cursor);
-  } catch {
-    // dataSources.query failed — try as a direct database below
+  } catch (error) {
+    if (tradeMap.size > 0) throw error;
+    primaryFailed = true;
   }
 
   // Fallback: direct database query (works when dataSourceId is a real DB ID)
-  if (tradeMap.size === 0) {
+  if (primaryFailed) {
     try {
       let dbCursor: string | undefined;
       do {
@@ -504,7 +506,7 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
           headers,
           body: JSON.stringify(body),
         });
-        if (!res.ok) break;
+        if (!res.ok) throw new Error(`Failed to load trades (${res.status})`);
         const data = await res.json() as Record<string, unknown>;
         const results = (data.results as Array<Record<string, unknown>>) ?? [];
         for (const page of results) {
@@ -515,7 +517,7 @@ export async function getAllTrades(creds?: { key?: string; dbId?: string }): Pro
         }
         dbCursor = (data.next_cursor as string | null) ?? undefined;
       } while (dbCursor);
-    } catch { /* ignore */ }
+    } catch (error) { throw error; }
   }
 
   const trades = [...tradeMap.values()].sort((a, b) => {

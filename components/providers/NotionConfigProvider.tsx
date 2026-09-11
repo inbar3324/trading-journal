@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { getNotionConfig, clearNotionConfig, type NotionConfig } from '@/lib/notion-config';
 import NotionSetup from '@/components/ui/NotionSetup';
+import { fetchJournalSnapshot, invalidateJournalSnapshot } from '@/lib/journal-cache';
+import { fetchTradesSnapshot, invalidateTradesSnapshot } from '@/lib/use-trades';
 
 interface Props {
   children: React.ReactNode;
@@ -14,6 +16,8 @@ export default function NotionConfigProvider({ children }: Props) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('reset') === '1') {
+      invalidateJournalSnapshot();
+      invalidateTradesSnapshot();
       clearNotionConfig();
       window.history.replaceState({}, '', window.location.pathname);
       setConfig(null);
@@ -21,6 +25,13 @@ export default function NotionConfigProvider({ children }: Props) {
     }
     setConfig(getNotionConfig());
   }, []);
+
+  useEffect(() => {
+    if (config && config !== 'loading') {
+      void fetchJournalSnapshot(config).catch(() => {});
+      void fetchTradesSnapshot(config).catch(() => {});
+    }
+  }, [config]);
 
   if (config === 'loading') {
     return (
