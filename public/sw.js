@@ -1,4 +1,4 @@
-const CACHE = 'tj-v2';
+const CACHE = 'tj-v3';
 const STATIC = ['/manifest.json', '/icons/icon.svg', '/icons/icon-maskable.svg'];
 
 self.addEventListener('install', (e) => {

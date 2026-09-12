@@ -1,37 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#14141B"/>
-      <stop offset="100%" stop-color="#0C0C11"/>
-    </linearGradient>
-    <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#F5C84A"/>
-      <stop offset="100%" stop-color="#C8840E"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.72" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="#E8A820" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#E8A820" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
-  <rect width="512" height="512" rx="96" fill="url(#glow)"/>
-  <rect x="2" y="2" width="508" height="508" rx="94" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2"/>
-
-  <line x1="100" y1="398" x2="412" y2="398" stroke="#E8A820" stroke-width="3" stroke-linecap="round" opacity="0.18"/>
-
-  <!-- Candle 1: short, left -->
-  <line x1="152" y1="292" x2="152" y2="274" stroke="url(#mark)" stroke-width="10" stroke-linecap="round"/>
-  <line x1="152" y1="368" x2="152" y2="387" stroke="url(#mark)" stroke-width="10" stroke-linecap="round"/>
-  <rect x="127" y="292" width="50" height="76" rx="9" fill="url(#mark)" opacity="0.78"/>
-
-  <!-- Candle 2: medium, center -->
-  <line x1="256" y1="208" x2="256" y2="182" stroke="url(#mark)" stroke-width="10" stroke-linecap="round"/>
-  <line x1="256" y1="340" x2="256" y2="362" stroke="url(#mark)" stroke-width="10" stroke-linecap="round"/>
-  <rect x="231" y="208" width="50" height="132" rx="9" fill="url(#mark)" opacity="0.90"/>
-
-  <!-- Candle 3: breakout, right — tall body + long upper wick -->
-  <line x1="360" y1="128" x2="360" y2="88" stroke="url(#mark)" stroke-width="10" stroke-linecap="round"/>
-  <line x1="360" y1="298" x2="360" y2="318" stroke="url(#mark)" stroke-width="10" stroke-linecap="round"/>
-  <rect x="335" y="128" width="50" height="170" rx="9" fill="url(#mark)"/>
+  <rect width="512" height="512" rx="112" fill="#F4F0E7"/>
+  <rect x="8" y="8" width="496" height="496" rx="104" fill="none" stroke="#151515" stroke-opacity=".1" stroke-width="8"/>
+  <g transform="translate(38 38) scale(.85)">
+    <path d="M126 130 344 27c19-9 40 5 40 26v175c0 14-7 26-19 32L128 394c-16 9-36-3-36-22V176c0-19 14-38 34-46Z" fill="#171719"/>
+    <path d="m297 300 87-49v99c0 22-23 35-42 24l-58-34c-16-10-14-31 13-40Z" fill="#E8A820"/>
+    <path d="m130 382 90-47c13-7 28-7 40 1l199 108c11 6 17 18 17 30 0 24-22 40-45 34L126 426c-22-6-25-33 4-44Z" fill="#171719"/>
+  </g>
 </svg>

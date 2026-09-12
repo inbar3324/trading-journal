@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download, CheckCircle2 } from 'lucide-react';
+import BrandMark from '@/components/brand/BrandMark';
 
 type Platform = 'ios' | 'android' | 'desktop' | 'unknown';
 
@@ -98,24 +99,8 @@ export default function InstallPage() {
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '28px 16px 32px' }}>
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{
-          width: 64, height: 64, borderRadius: 16, margin: '0 auto 16px',
-          background: 'linear-gradient(135deg, rgba(232,168,32,0.14), rgba(200,132,14,0.05))',
-          border: '1px solid rgba(232,168,32,0.22)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <svg viewBox="0 0 20 18" width="28" height="24" fill="none">
-            <line x1="4" y1="16.5" x2="16" y2="16.5" stroke="#E8A820" strokeWidth="1" strokeLinecap="round" opacity="0.35"/>
-            <line x1="4" y1="10" x2="4" y2="8.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="4" y1="14.5" x2="4" y2="16" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
-            <rect x="1.75" y="10" width="4.5" height="4.5" rx="1" fill="#E8A820" opacity="0.75"/>
-            <line x1="10" y1="6.5" x2="10" y2="4.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="10" y1="13.5" x2="10" y2="15.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
-            <rect x="7.75" y="6.5" width="4.5" height="7" rx="1" fill="#E8A820" opacity="0.88"/>
-            <line x1="16" y1="2.5" x2="16" y2="1" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1="16" y1="12" x2="16" y2="13.5" stroke="#F5C84A" strokeWidth="1.5" strokeLinecap="round"/>
-            <rect x="13.75" y="2.5" width="4.5" height="9.5" rx="1" fill="#F5C84A"/>
-          </svg>
+        <div style={{ width: 64, height: 64, margin: '0 auto 16px' }}>
+          <BrandMark size={64} />
         </div>
         <div style={{ color: 'var(--text-primary)', fontSize: 22, fontWeight: 700, marginBottom: 6 }}>
           הורד את TradeJournal

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
+import BrandMark from '@/components/brand/BrandMark';
 
 interface InstallPrompt extends Event {
   prompt(): Promise<void>;
@@ -93,18 +94,7 @@ export default function PWAInstall() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                background: 'linear-gradient(135deg, rgba(232,168,32,0.14), rgba(200,132,14,0.05))',
-                border: '1px solid rgba(232,168,32,0.22)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <svg viewBox="0 0 20 18" width="16" height="14" fill="none">
-                  <rect x="1.75" y="10" width="4.5" height="4.5" rx="1" fill="#E8A820" opacity="0.75"/>
-                  <rect x="7.75" y="6.5" width="4.5" height="7" rx="1" fill="#E8A820" opacity="0.88"/>
-                  <rect x="13.75" y="2.5" width="4.5" height="9.5" rx="1" fill="#F5C84A"/>
-                </svg>
-              </div>
+              <BrandMark size={36} />
               <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 15 }}>
                 התקן TradeJournal
               </span>
@@ -156,18 +146,7 @@ export default function PWAInstall() {
           boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
         }}
       >
-        <div style={{
-          width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-          background: 'linear-gradient(135deg, rgba(232,168,32,0.14), rgba(200,132,14,0.05))',
-          border: '1px solid rgba(232,168,32,0.22)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <svg viewBox="0 0 20 18" width="15" height="13" fill="none">
-            <rect x="1.75" y="10" width="4.5" height="4.5" rx="1" fill="#E8A820" opacity="0.75"/>
-            <rect x="7.75" y="6.5" width="4.5" height="7" rx="1" fill="#E8A820" opacity="0.88"/>
-            <rect x="13.75" y="2.5" width="4.5" height="9.5" rx="1" fill="#F5C84A"/>
-          </svg>
-        </div>
+        <BrandMark size={34} />
         <div style={{ flex: 1 }}>
           <div style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>TradeJournal</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>הוסף למסך הבית</div>

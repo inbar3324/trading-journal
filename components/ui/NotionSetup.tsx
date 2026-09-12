@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { TrendingUp, Eye, EyeOff, ChevronDown, ChevronUp, Database, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown, ChevronUp, Database, ArrowLeft } from 'lucide-react';
 import { saveNotionConfig, type NotionConfig } from '@/lib/notion-config';
+import BrandMark from '@/components/brand/BrandMark';
 
 interface DbOption {
   id: string;
@@ -121,17 +122,7 @@ export default function NotionSetup({ onSave }: Props) {
             <div className="space-y-6">
               {/* Logo + brand */}
               <div className="flex items-center gap-3">
-                <div
-                  style={{
-                    width: 42, height: 42, borderRadius: 14, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'linear-gradient(135deg, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0.05) 100%)',
-                    border: '1px solid rgba(59,130,246,0.24)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
-                  }}
-                >
-                  <TrendingUp size={18} color="var(--blue)" strokeWidth={2.2} />
-                </div>
+                <BrandMark size={42} />
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
                     TradeJournal
