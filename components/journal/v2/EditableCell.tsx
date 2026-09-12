@@ -19,6 +19,8 @@ interface Props {
   // When true, the cell starts in edit mode (used for inline new-row).
   initialEdit?: boolean;
   autoFocus?: boolean;
+  // Use the same high-contrast text treatment as a Journal title cell.
+  prominentText?: boolean;
 }
 
 const READONLY_TYPES = new Set([
@@ -27,7 +29,7 @@ const READONLY_TYPES = new Set([
   'unique_id', 'unsupported',
 ]);
 
-export function EditableCell({ prop, value, onCommit, onUploadFile, onDeleteFile, initialEdit, autoFocus }: Props) {
+export function EditableCell({ prop, value, onCommit, onUploadFile, onDeleteFile, initialEdit, autoFocus, prominentText }: Props) {
   const [editing, setEditing] = useState(!!initialEdit);
   const [popRect, setPopRect] = useState<DOMRect | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
@@ -90,7 +92,7 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, onDeleteFile
             display: 'flex', alignItems: 'center',
           }}
         >
-          <DisplayValue value={value} onImageClick={prop.type === 'files' ? (i) => setLightboxIdx(i) : undefined} />
+          <DisplayValue value={value} prominentText={prominentText} onImageClick={prop.type === 'files' ? (i) => setLightboxIdx(i) : undefined} />
         </div>
       </>
     );
@@ -180,6 +182,7 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, onDeleteFile
       onCancel={() => setEditing(false)}
       onUploadFile={onUploadFile}
       onDeleteFile={onDeleteFile}
+      prominentText={prominentText}
     />
   );
 }
@@ -187,14 +190,14 @@ export function EditableCell({ prop, value, onCommit, onUploadFile, onDeleteFile
 // ─────────────────────────────────────────────────────────────────────────────
 // Read-only display (used inside cells and detail views)
 // ─────────────────────────────────────────────────────────────────────────────
-function DisplayValue({ value, onImageClick }: { value: NotionPropValue; onImageClick?: (idx: number) => void }) {
+function DisplayValue({ value, prominentText, onImageClick }: { value: NotionPropValue; prominentText?: boolean; onImageClick?: (idx: number) => void }) {
   switch (value.type) {
     case 'title':
       return value.text
         ? <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' }}>{value.text}</span>
         : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Untitled</span>;
     case 'rich_text':
-      return <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' }}>{value.text}</span>;
+      return <span style={{ fontSize: prominentText ? 13 : 12, fontWeight: prominentText ? 500 : undefined, color: prominentText ? 'var(--text-primary)' : 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' }}>{value.text}</span>;
     case 'number':
       if (value.value === null) return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>;
       return <span className="tabular" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{value.value}</span>;
@@ -329,9 +332,10 @@ interface InlineProps {
   onCancel: () => void;
   onUploadFile?: (file: File) => Promise<void>;
   onDeleteFile?: (index: number) => Promise<void>;
+  prominentText?: boolean;
 }
 
-function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile, onDeleteFile }: InlineProps) {
+function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile, onDeleteFile, prominentText }: InlineProps) {
   const inputBase: React.CSSProperties = {
     background: 'transparent', border: 'none', outline: 'none',
     color: 'var(--text-primary)', fontSize: 13, width: '100%', fontFamily: 'inherit', padding: 0,
@@ -355,7 +359,7 @@ function InlineEditor({ prop, value, autoFocus, onCommit, onCancel, onUploadFile
       <TextareaInput
         autoFocus={autoFocus}
         initial={init}
-        style={inputBase}
+        style={{ ...inputBase, fontWeight: prominentText ? 500 : undefined }}
         onCommit={text => onCommit({ type: 'rich_text', text })}
         onCancel={onCancel}
       />

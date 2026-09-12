@@ -942,12 +942,13 @@ export default function WeeklySummaryPage() {
                     style={{
                       width: colWidth(toPropDef(col).type),
                       minWidth: colWidth(toPropDef(col).type),
-                      padding: '5px 8px', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)',
+                      height: 64, padding: '12px 16px', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)',
                     }}
                   >
                     <EditableCell
                       prop={toPropDef(col)}
                       value={row.cells[col.id] ?? defaultCell(col.type)}
+                      prominentText={col.type === 'text'}
                       onCommit={next => updateCell(row.id, col.id, next)}
                       onUploadFile={toPropDef(col).type === 'files' ? (f) => uploadCellFile(row.id, col.id, f) : undefined}
                     />
