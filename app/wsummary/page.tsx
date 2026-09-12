@@ -678,6 +678,12 @@ export default function WeeklySummaryPage() {
   const rows = store.rows;
   const rowDragEnabled = !store.notion;
   const minW = cols.reduce((s, c) => s + colWidth(toPropDef(c).type), 0) + 32 + 28;
+  const stickyHeaderCell = {
+    position: 'sticky' as const,
+    top: 0,
+    zIndex: 2,
+    background: 'var(--bg-surface)',
+  };
   const isConnected = !!store.notion;
 
   // ── Notebook adapter (memoized would be nice but cheap to recompute) ───────
@@ -712,7 +718,7 @@ export default function WeeklySummaryPage() {
   })();
 
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '28px 32px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
@@ -823,12 +829,12 @@ export default function WeeklySummaryPage() {
       ) : (
       <>
       {/* Table */}
-      <div className="journal-scroll" style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 10 }}>
+      <div className="journal-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid var(--border-color)', borderRadius: 10 }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: minW }}>
           <thead>
             <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-color)' }}>
-              <th style={{ width: 32, minWidth: 32 }} />
-              <th style={{ width: 28, minWidth: 28, borderRight: '1px solid var(--border-color)' }} />
+              <th style={{ ...stickyHeaderCell, width: 32, minWidth: 32 }} />
+              <th style={{ ...stickyHeaderCell, width: 28, minWidth: 28, borderRight: '1px solid var(--border-color)' }} />
               {cols.map(col => (
                 <th
                   key={col.id}
@@ -856,6 +862,7 @@ export default function WeeklySummaryPage() {
                     setDragOverColId(null);
                   }}
                   style={{
+                    ...stickyHeaderCell,
                     width: colWidth(toPropDef(col).type),
                     minWidth: colWidth(toPropDef(col).type),
                     padding: '8px 0', textAlign: 'left',
@@ -865,7 +872,7 @@ export default function WeeklySummaryPage() {
                     fontWeight: 400,
                     cursor: dragColId ? 'grabbing' : 'grab',
                     opacity: dragColId === col.id ? 0.4 : 1,
-                    background: dragOverColId === col.id ? 'rgba(59,130,246,0.07)' : undefined,
+                    background: dragOverColId === col.id ? 'rgba(59,130,246,0.07)' : 'var(--bg-surface)',
                     transition: 'background 80ms, opacity 80ms',
                   }}
                 >
