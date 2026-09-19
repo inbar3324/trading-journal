@@ -46,19 +46,12 @@ test('copies unique Journal NEWS values into the matching weekly date range', ()
   });
 });
 
-test('does not rewrite an already synchronized cell and supports a text target', () => {
+test('does not rewrite an already synchronized cell', () => {
   const multiStore = {
     columns,
     rows: [{ id: 'a', cells: { week: date('2026-09-14'), news: multi('CPI') } }],
   };
   assert.equal(buildWeeklyNewsPlan(multiStore, [{ date: '2026-09-14', news: ['CPI'] }]).patches.length, 0);
-
-  const textStore = {
-    columns: columns.map(column => column.id === 'news' ? { ...column, type: 'text' } : column),
-    rows: [{ id: 'a', cells: { week: date('2026-09-14', '2026-09-18'), news: { type: 'rich_text', text: '' } } }],
-  };
-  const plan = buildWeeklyNewsPlan(textStore, [{ date: '2026-09-16', news: ['CPI', 'FOMC'] }]);
-  assert.deepEqual(JSON.parse(JSON.stringify(plan.patches[0].value)), { type: 'rich_text', text: 'CPI, FOMC' });
 });
 
 test('stays inactive until both named NEWS and weekly date columns exist', () => {
@@ -114,4 +107,20 @@ test('recognizes the actual NEWS FOR THE WEEK column name', () => {
     { name: 'FOMC', color: 'purple' },
     { name: 'CPI', color: 'red' },
   ]);
+});
+
+test('turns a default text NEWS FOR THE WEEK column into a Journal-style multi-select', () => {
+  const store = {
+    columns: columns.map(column => column.id === 'news'
+      ? { id: column.id, name: 'NEWS FOR THE WEEK', type: 'text' }
+      : column),
+    rows: [{ id: 'a', cells: { week: date('2026-09-14', '2026-09-18'), news: { type: 'rich_text', text: 'MANUAL EVENT' } } }],
+  };
+  const plan = buildWeeklyNewsPlan(store, [], {}, [{ name: 'FOMC', color: 'purple' }]);
+
+  assert.equal(plan.needsTypeChange, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.targetOptions)), [
+    { name: 'FOMC', color: 'purple' },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.patches[0].value)), multi('MANUAL EVENT'));
 });

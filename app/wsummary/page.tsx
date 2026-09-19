@@ -397,16 +397,21 @@ export default function WeeklySummaryPage() {
       const targetColumn = plan.targetColumn;
       if (!targetColumn) return;
       writeManagedNews(newsScope, plan.managedNewsByRow);
-      if (!plan.optionsChanged && plan.patches.length === 0) return;
+      if (!plan.needsTypeChange && !plan.optionsChanged && plan.patches.length === 0) return;
 
       const patchesByRow = new Map(plan.patches.map(patch => [patch.rowId, patch.value]));
 
       upd(s => {
         return {
           ...s,
-          columns: plan.optionsChanged
+          columns: plan.needsTypeChange || plan.optionsChanged
             ? s.columns.map(column => column.id === targetColumn.id
-              ? { ...column, options: plan.targetOptions }
+              ? {
+                ...column,
+                type: 'multi_select' as const,
+                notionType: column.notionType ? 'multi_select' as const : undefined,
+                options: plan.targetOptions,
+              }
               : column)
             : s.columns,
           rows: s.rows.map(row => {
@@ -420,10 +425,10 @@ export default function WeeklySummaryPage() {
         enqueue(async () => {
           const synced = storeRef.current;
           if (!synced?.notion) return;
-          if (plan.optionsChanged && targetColumn.type === 'multi_select' && targetColumn.notionPropId) {
+          if ((plan.needsTypeChange || plan.optionsChanged) && targetColumn.notionPropId) {
             await patchDbSchema(synced.notion.dbId, {
               [targetColumn.notionPropId]: colToSchemaEntry(
-                { ...targetColumn, options: plan.targetOptions },
+                { ...targetColumn, type: 'multi_select', options: plan.targetOptions },
                 false,
               ),
             });

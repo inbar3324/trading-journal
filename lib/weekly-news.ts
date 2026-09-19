@@ -20,6 +20,7 @@ export interface WeeklyNewsPlan {
   managedNewsByRow: Record<string, string[]>;
   targetOptions: { name: string; color: string }[];
   optionsChanged: boolean;
+  needsTypeChange: boolean;
 }
 
 function columnKey(name: string): string {
@@ -92,6 +93,9 @@ function currentNewsNames(column: WColumn, value: NotionPropValue | undefined): 
   if (column.type === 'text' && value?.type === 'rich_text') {
     return value.text.split(',').map(name => name.trim()).filter(Boolean);
   }
+  if (column.type === 'select' && value?.type === 'select' && value.option) {
+    return [value.option.name];
+  }
   return [];
 }
 
@@ -129,18 +133,25 @@ export function buildWeeklyNewsPlan(
   const dateColumns = store.columns.filter(column => column.type === 'date');
   const dateColumn = dateColumns.find(column => WEEK_DATE_KEYS.has(columnKey(column.name)))
     ?? (dateColumns.length === 1 ? dateColumns[0] : null);
-  const targetOptions = targetColumn?.type === 'multi_select'
+  const targetOptions = targetColumn
     ? mergedTargetOptions(targetColumn.options ?? [], journalNewsOptions)
     : [];
+  const needsTypeChange = !!targetColumn && targetColumn.type !== 'multi_select';
   const optionsChanged = targetColumn?.type === 'multi_select'
     && JSON.stringify(targetColumn.options ?? []) !== JSON.stringify(targetOptions);
 
   if (!targetColumn || !dateColumn) {
-    return { targetColumn, dateColumn, patches: [], managedNewsByRow: {}, targetOptions, optionsChanged: !!optionsChanged };
+    return {
+      targetColumn,
+      dateColumn,
+      patches: [],
+      managedNewsByRow: {},
+      targetOptions,
+      optionsChanged: !!optionsChanged,
+      needsTypeChange,
+    };
   }
-  const valueColumn = targetColumn.type === 'multi_select'
-    ? { ...targetColumn, options: targetOptions }
-    : targetColumn;
+  const valueColumn: WColumn = { ...targetColumn, type: 'multi_select', options: targetOptions };
 
   const patches: WeeklyNewsPatch[] = [];
   const managedNewsByRow: Record<string, string[]> = {};
@@ -162,5 +173,13 @@ export function buildWeeklyNewsPlan(
     }
   }
 
-  return { targetColumn, dateColumn, patches, managedNewsByRow, targetOptions, optionsChanged: !!optionsChanged };
+  return {
+    targetColumn,
+    dateColumn,
+    patches,
+    managedNewsByRow,
+    targetOptions,
+    optionsChanged: !!optionsChanged,
+    needsTypeChange,
+  };
 }
