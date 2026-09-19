@@ -10,7 +10,7 @@ const code = ts.transpileModule(source, {
 }).outputText;
 const exportsForTest = {};
 vm.runInNewContext(code, { exports: exportsForTest });
-const { buildWeeklyNewsPlan } = exportsForTest;
+const { buildWeeklyNewsPlan, weeklyNewsPickerValue, weeklyNewsStoredValue } = exportsForTest;
 
 const date = (start, end = null) => ({ type: 'date', start, end, hasTime: false });
 const multi = (...names) => ({ type: 'multi_select', options: names.map(name => ({ name, color: 'default' })) });
@@ -109,7 +109,7 @@ test('recognizes the actual NEWS FOR THE WEEK column name', () => {
   ]);
 });
 
-test('turns a default text NEWS FOR THE WEEK column into a Journal-style multi-select', () => {
+test('presents a text NEWS FOR THE WEEK column as a safe Journal-style picker', () => {
   const store = {
     columns: columns.map(column => column.id === 'news'
       ? { id: column.id, name: 'NEWS FOR THE WEEK', type: 'text' }
@@ -117,10 +117,15 @@ test('turns a default text NEWS FOR THE WEEK column into a Journal-style multi-s
     rows: [{ id: 'a', cells: { week: date('2026-09-14', '2026-09-18'), news: { type: 'rich_text', text: 'MANUAL EVENT' } } }],
   };
   const plan = buildWeeklyNewsPlan(store, [], {}, [{ name: 'FOMC', color: 'purple' }]);
+  const textColumn = store.columns.find(column => column.id === 'news');
+  const pickerValue = weeklyNewsPickerValue(store.rows[0].cells.news, plan.targetOptions);
 
-  assert.equal(plan.needsTypeChange, true);
   assert.deepEqual(JSON.parse(JSON.stringify(plan.targetOptions)), [
     { name: 'FOMC', color: 'purple' },
   ]);
-  assert.deepEqual(JSON.parse(JSON.stringify(plan.patches[0].value)), multi('MANUAL EVENT'));
+  assert.deepEqual(JSON.parse(JSON.stringify(pickerValue)), multi('MANUAL EVENT'));
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(weeklyNewsStoredValue(textColumn, multi('FOMC', 'MANUAL EVENT')))),
+    { type: 'rich_text', text: 'FOMC, MANUAL EVENT' },
+  );
 });

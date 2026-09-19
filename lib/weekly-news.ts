@@ -18,18 +18,39 @@ export interface WeeklyNewsPlan {
   dateColumn: WColumn | null;
   patches: WeeklyNewsPatch[];
   managedNewsByRow: Record<string, string[]>;
-  targetOptions: { name: string; color: string }[];
+  targetOptions: { name: string; color: NotionColor }[];
   optionsChanged: boolean;
-  needsTypeChange: boolean;
 }
 
 function columnKey(name: string): string {
   return name.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-function isWeeklyNewsColumn(name: string): boolean {
+export function isWeeklyNewsColumn(name: string): boolean {
   const key = columnKey(name);
   return NEWS_COLUMN_KEYS.has(key) || (key.startsWith('NEWS') && key.includes('WEEK'));
+}
+
+export function weeklyNewsPickerValue(
+  value: NotionPropValue,
+  options: SelectOption[],
+): NotionPropValue {
+  if (value.type === 'multi_select') return value;
+  const names = value.type === 'rich_text'
+    ? value.text.split(',').map(name => name.trim()).filter(Boolean)
+    : [];
+  const known = new Map(options.map(option => [option.name, option]));
+  return {
+    type: 'multi_select',
+    options: names.map(name => ({ name, color: notionColor(known.get(name)?.color) })),
+  };
+}
+
+export function weeklyNewsStoredValue(column: WColumn, value: NotionPropValue): NotionPropValue {
+  if (column.type === 'text' && value.type === 'multi_select') {
+    return { type: 'rich_text', text: value.options.map(option => option.name).join(', ') };
+  }
+  return value;
 }
 
 function dateKey(value: string | null | undefined): string | null {
@@ -106,8 +127,8 @@ function uniqueNames(names: string[]): string[] {
 function mergedTargetOptions(
   existing: { name: string; color: string }[],
   journal: { name: string; color?: string }[],
-): { name: string; color: string }[] {
-  const merged: { name: string; color: string }[] = [];
+): { name: string; color: NotionColor }[] {
+  const merged: { name: string; color: NotionColor }[] = [];
   const seen = new Set<string>();
   for (const option of journal) {
     const name = option.name.trim();
@@ -118,7 +139,7 @@ function mergedTargetOptions(
   for (const option of existing) {
     if (seen.has(option.name)) continue;
     seen.add(option.name);
-    merged.push(option);
+    merged.push({ name: option.name, color: notionColor(option.color) });
   }
   return merged;
 }
@@ -136,7 +157,6 @@ export function buildWeeklyNewsPlan(
   const targetOptions = targetColumn
     ? mergedTargetOptions(targetColumn.options ?? [], journalNewsOptions)
     : [];
-  const needsTypeChange = !!targetColumn && targetColumn.type !== 'multi_select';
   const optionsChanged = targetColumn?.type === 'multi_select'
     && JSON.stringify(targetColumn.options ?? []) !== JSON.stringify(targetOptions);
 
@@ -148,10 +168,11 @@ export function buildWeeklyNewsPlan(
       managedNewsByRow: {},
       targetOptions,
       optionsChanged: !!optionsChanged,
-      needsTypeChange,
     };
   }
-  const valueColumn: WColumn = { ...targetColumn, type: 'multi_select', options: targetOptions };
+  const valueColumn: WColumn = targetColumn.type === 'multi_select'
+    ? { ...targetColumn, options: targetOptions }
+    : targetColumn;
 
   const patches: WeeklyNewsPatch[] = [];
   const managedNewsByRow: Record<string, string[]> = {};
@@ -180,6 +201,5 @@ export function buildWeeklyNewsPlan(
     managedNewsByRow,
     targetOptions,
     optionsChanged: !!optionsChanged,
-    needsTypeChange,
   };
 }

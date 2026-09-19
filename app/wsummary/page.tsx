@@ -17,7 +17,12 @@ import {
   notionTypeToWColType, safeJson, reorderColumns as apiReorderColumns,
 } from '@/lib/weekly-sync-client';
 import { colToSchemaEntry } from '@/lib/weekly-notion';
-import { buildWeeklyNewsPlan } from '@/lib/weekly-news';
+import {
+  buildWeeklyNewsPlan,
+  isWeeklyNewsColumn,
+  weeklyNewsPickerValue,
+  weeklyNewsStoredValue,
+} from '@/lib/weekly-news';
 import type { FieldMap, NotionSchema, Trade } from '@/lib/types';
 
 const NotebookView = dynamic(() => import('@/components/journal/notebook/NotebookView').then(m => m.NotebookView));
@@ -192,6 +197,7 @@ export default function WeeklySummaryPage() {
   const [syncError, setSyncError] = useState('');
   const [settingsModal, setSettingsModal] = useState(false);
   const [activeView, setActiveView] = useState<'table' | 'notebook'>('table');
+  const [journalNewsOptions, setJournalNewsOptions] = useState<SelectOption[]>([]);
 
   const storeRef = useRef<WStore | null>(null);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -396,22 +402,20 @@ export default function WeeklySummaryPage() {
       );
       const targetColumn = plan.targetColumn;
       if (!targetColumn) return;
+      setJournalNewsOptions(current => JSON.stringify(current) === JSON.stringify(plan.targetOptions)
+        ? current
+        : plan.targetOptions);
       writeManagedNews(newsScope, plan.managedNewsByRow);
-      if (!plan.needsTypeChange && !plan.optionsChanged && plan.patches.length === 0) return;
+      if (!plan.optionsChanged && plan.patches.length === 0) return;
 
       const patchesByRow = new Map(plan.patches.map(patch => [patch.rowId, patch.value]));
 
       upd(s => {
         return {
           ...s,
-          columns: plan.needsTypeChange || plan.optionsChanged
+          columns: plan.optionsChanged
             ? s.columns.map(column => column.id === targetColumn.id
-              ? {
-                ...column,
-                type: 'multi_select' as const,
-                notionType: column.notionType ? 'multi_select' as const : undefined,
-                options: plan.targetOptions,
-              }
+              ? { ...column, options: plan.targetOptions }
               : column)
             : s.columns,
           rows: s.rows.map(row => {
@@ -425,10 +429,10 @@ export default function WeeklySummaryPage() {
         enqueue(async () => {
           const synced = storeRef.current;
           if (!synced?.notion) return;
-          if ((plan.needsTypeChange || plan.optionsChanged) && targetColumn.notionPropId) {
+          if (plan.optionsChanged && targetColumn.type === 'multi_select' && targetColumn.notionPropId) {
             await patchDbSchema(synced.notion.dbId, {
               [targetColumn.notionPropId]: colToSchemaEntry(
-                { ...targetColumn, type: 'multi_select', options: plan.targetOptions },
+                { ...targetColumn, options: plan.targetOptions },
                 false,
               ),
             });
@@ -1066,24 +1070,52 @@ export default function WeeklySummaryPage() {
                     transition: 'opacity 120ms', userSelect: 'none',
                   }}
                 >{rowDragEnabled ? '⠿' : ''}</td>
-                {cols.map(col => (
-                  <td
-                    key={col.id}
-                    style={{
-                      width: colWidth(toPropDef(col).type),
-                      minWidth: colWidth(toPropDef(col).type),
-                      height: 64, padding: '12px 16px', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)',
-                    }}
-                  >
-                    <EditableCell
-                      prop={toPropDef(col)}
-                      value={row.cells[col.id] ?? defaultCell(col.type)}
-                      prominentText={col.type === 'text'}
-                      onCommit={next => updateCell(row.id, col.id, next)}
-                      onUploadFile={toPropDef(col).type === 'files' ? (f) => uploadCellFile(row.id, col.id, f) : undefined}
-                    />
-                  </td>
-                ))}
+                {cols.map(col => {
+                  const storedValue = row.cells[col.id] ?? defaultCell(col.type);
+                  const useJournalNewsPicker = isWeeklyNewsColumn(col.name) && col.type === 'text';
+                  const pickerValue = useJournalNewsPicker
+                    ? weeklyNewsPickerValue(storedValue, journalNewsOptions)
+                    : storedValue;
+                  const selectedOptions = pickerValue.type === 'multi_select' ? pickerValue.options : [];
+                  const pickerOptions = [...journalNewsOptions];
+                  for (const option of selectedOptions) {
+                    if (!pickerOptions.some(candidate => candidate.name === option.name)) {
+                      pickerOptions.push({ name: option.name, color: option.color ?? 'default' });
+                    }
+                  }
+                  const prop = useJournalNewsPicker
+                    ? { ...toPropDef(col), type: 'multi_select' as const, options: pickerOptions }
+                    : toPropDef(col);
+                  return (
+                    <td
+                      key={col.id}
+                      style={{
+                        width: colWidth(prop.type),
+                        minWidth: colWidth(prop.type),
+                        height: 64, padding: '12px 16px', verticalAlign: 'middle', borderRight: '1px solid var(--border-color)',
+                      }}
+                    >
+                      <EditableCell
+                        prop={prop}
+                        value={pickerValue}
+                        prominentText={col.type === 'text' && !useJournalNewsPicker}
+                        onCommit={next => {
+                          if (next.type === 'multi_select') {
+                            setJournalNewsOptions(current => {
+                              const known = new Set(current.map(option => option.name));
+                              const added = next.options
+                                .filter(option => !known.has(option.name))
+                                .map(option => ({ name: option.name, color: option.color ?? 'default' }));
+                              return added.length ? [...current, ...added] : current;
+                            });
+                          }
+                          updateCell(row.id, col.id, weeklyNewsStoredValue(col, next));
+                        }}
+                        onUploadFile={prop.type === 'files' ? (f) => uploadCellFile(row.id, col.id, f) : undefined}
+                      />
+                    </td>
+                  );
+                })}
               </tr>
             ))}
             <tr ref={addRowBtnRef}>
