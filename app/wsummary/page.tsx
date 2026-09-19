@@ -18,7 +18,7 @@ import {
 } from '@/lib/weekly-sync-client';
 import { colToSchemaEntry } from '@/lib/weekly-notion';
 import { buildWeeklyNewsPlan } from '@/lib/weekly-news';
-import type { Trade } from '@/lib/types';
+import type { FieldMap, NotionSchema, Trade } from '@/lib/types';
 
 const NotebookView = dynamic(() => import('@/components/journal/notebook/NotebookView').then(m => m.NotebookView));
 
@@ -366,36 +366,47 @@ export default function WeeklySummaryPage() {
 
     newsSyncBusyRef.current = true;
     try {
-      const response = await fetch('/api/trades', { headers: notionHeaders(config) });
-      const data = await safeJson<{ trades?: Trade[]; error?: string }>(response, 'Failed to load Journal news');
-      if (!response.ok) throw new Error(data.error ?? `Failed to load Journal news (HTTP ${response.status})`);
+      const [tradesResponse, schemaResponse] = await Promise.all([
+        fetch('/api/trades', { headers: notionHeaders(config) }),
+        fetch('/api/notion/schema', { headers: notionHeaders(config) }),
+      ]);
+      const data = await safeJson<{ trades?: Trade[]; fieldMap?: FieldMap; error?: string }>(
+        tradesResponse,
+        'Failed to load Journal news',
+      );
+      const schemaData = await safeJson<{ schema?: NotionSchema; error?: string }>(
+        schemaResponse,
+        'Failed to load Journal news options',
+      );
+      if (!tradesResponse.ok) throw new Error(data.error ?? `Failed to load Journal news (HTTP ${tradesResponse.status})`);
+      if (!schemaResponse.ok) throw new Error(schemaData.error ?? `Failed to load Journal news options (HTTP ${schemaResponse.status})`);
 
       const latest = storeRef.current;
       if (!latest) return;
       const newsScope = latest.notion?.dbId ?? 'local';
-      const plan = buildWeeklyNewsPlan(latest, data.trades ?? [], readManagedNews(newsScope));
+      const newsFieldName = data.fieldMap?.news ?? config.fieldMap?.news ?? 'NEWS';
+      const journalNewsOptions = schemaData.schema?.[newsFieldName]
+        ?? Object.entries(schemaData.schema ?? {}).find(([name]) => name.trim().toUpperCase() === 'NEWS')?.[1]
+        ?? [];
+      const plan = buildWeeklyNewsPlan(
+        latest,
+        data.trades ?? [],
+        readManagedNews(newsScope),
+        journalNewsOptions,
+      );
       const targetColumn = plan.targetColumn;
       if (!targetColumn) return;
       writeManagedNews(newsScope, plan.managedNewsByRow);
-      if (plan.patches.length === 0) return;
+      if (!plan.optionsChanged && plan.patches.length === 0) return;
 
       const patchesByRow = new Map(plan.patches.map(patch => [patch.rowId, patch.value]));
-      const discoveredOptions = targetColumn.type === 'multi_select'
-        ? plan.patches.flatMap(patch => patch.value.type === 'multi_select' ? patch.value.options : [])
-        : [];
 
       upd(s => {
-        const known = new Set(targetColumn.options?.map(option => option.name) ?? []);
-        const addedOptions = discoveredOptions.filter(option => {
-          if (known.has(option.name)) return false;
-          known.add(option.name);
-          return true;
-        }).map(option => ({ name: option.name, color: option.color ?? 'default' }));
         return {
           ...s,
-          columns: addedOptions.length
+          columns: plan.optionsChanged
             ? s.columns.map(column => column.id === targetColumn.id
-              ? { ...column, options: [...(column.options ?? []), ...addedOptions] }
+              ? { ...column, options: plan.targetOptions }
               : column)
             : s.columns,
           rows: s.rows.map(row => {
@@ -409,6 +420,14 @@ export default function WeeklySummaryPage() {
         enqueue(async () => {
           const synced = storeRef.current;
           if (!synced?.notion) return;
+          if (plan.optionsChanged && targetColumn.type === 'multi_select' && targetColumn.notionPropId) {
+            await patchDbSchema(synced.notion.dbId, {
+              [targetColumn.notionPropId]: colToSchemaEntry(
+                { ...targetColumn, options: plan.targetOptions },
+                false,
+              ),
+            });
+          }
           for (const patch of plan.patches) {
             const row = synced.rows.find(candidate => candidate.id === patch.rowId);
             if (!row?.notionPageId) continue;
@@ -433,7 +452,7 @@ export default function WeeklySummaryPage() {
   useEffect(() => {
     if (!newsStoreReady) return;
     const initial = window.setTimeout(() => { void syncJournalNews(); }, 0);
-    const interval = window.setInterval(() => { void syncJournalNews(); }, 15_000);
+    const interval = window.setInterval(() => { void syncJournalNews(); }, 60_000);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(interval);

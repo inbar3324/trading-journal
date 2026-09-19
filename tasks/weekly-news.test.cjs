@@ -82,3 +82,20 @@ test('keeps manually added weekly news while refreshing copied Journal news', ()
   assert.deepEqual(JSON.parse(JSON.stringify(plan.patches[0].value)), multi('FOMC', 'MANUAL EVENT'));
   assert.deepEqual(JSON.parse(JSON.stringify(plan.managedNewsByRow)), { a: ['FOMC'] });
 });
+
+test('copies every Journal NEWS option into NEWS OF THE WEEK for manual selection', () => {
+  const store = {
+    columns,
+    rows: [{ id: 'a', cells: { week: date('2026-09-14', '2026-09-18'), news: multi() } }],
+  };
+  const plan = buildWeeklyNewsPlan(store, [], {}, [
+    { name: 'CPI', color: 'red' },
+    { name: 'FOMC', color: 'purple' },
+  ]);
+
+  assert.equal(plan.optionsChanged, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.targetOptions)), [
+    { name: 'CPI', color: 'red' },
+    { name: 'FOMC', color: 'purple' },
+  ]);
+});

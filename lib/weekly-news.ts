@@ -18,6 +18,8 @@ export interface WeeklyNewsPlan {
   dateColumn: WColumn | null;
   patches: WeeklyNewsPatch[];
   managedNewsByRow: Record<string, string[]>;
+  targetOptions: { name: string; color: string }[];
+  optionsChanged: boolean;
 }
 
 function columnKey(name: string): string {
@@ -92,17 +94,48 @@ function uniqueNames(names: string[]): string[] {
   return [...new Set(names.map(name => name.trim()).filter(Boolean))];
 }
 
+function mergedTargetOptions(
+  existing: { name: string; color: string }[],
+  journal: { name: string; color?: string }[],
+): { name: string; color: string }[] {
+  const merged: { name: string; color: string }[] = [];
+  const seen = new Set<string>();
+  for (const option of journal) {
+    const name = option.name.trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    merged.push({ name, color: notionColor(option.color) });
+  }
+  for (const option of existing) {
+    if (seen.has(option.name)) continue;
+    seen.add(option.name);
+    merged.push(option);
+  }
+  return merged;
+}
+
 export function buildWeeklyNewsPlan(
   store: WStore,
   trades: Trade[],
   previouslyManagedByRow: Record<string, string[]> = {},
+  journalNewsOptions: { name: string; color?: string }[] = [],
 ): WeeklyNewsPlan {
   const targetColumn = store.columns.find(column => columnKey(column.name) === NEWS_COLUMN_KEY) ?? null;
   const dateColumns = store.columns.filter(column => column.type === 'date');
   const dateColumn = dateColumns.find(column => WEEK_DATE_KEYS.has(columnKey(column.name)))
     ?? (dateColumns.length === 1 ? dateColumns[0] : null);
+  const targetOptions = targetColumn?.type === 'multi_select'
+    ? mergedTargetOptions(targetColumn.options ?? [], journalNewsOptions)
+    : [];
+  const optionsChanged = targetColumn?.type === 'multi_select'
+    && JSON.stringify(targetColumn.options ?? []) !== JSON.stringify(targetOptions);
 
-  if (!targetColumn || !dateColumn) return { targetColumn, dateColumn, patches: [], managedNewsByRow: {} };
+  if (!targetColumn || !dateColumn) {
+    return { targetColumn, dateColumn, patches: [], managedNewsByRow: {}, targetOptions, optionsChanged: !!optionsChanged };
+  }
+  const valueColumn = targetColumn.type === 'multi_select'
+    ? { ...targetColumn, options: targetOptions }
+    : targetColumn;
 
   const patches: WeeklyNewsPatch[] = [];
   const managedNewsByRow: Record<string, string[]> = {};
@@ -118,11 +151,11 @@ export function buildWeeklyNewsPlan(
     const previouslyManaged = new Set(previouslyManagedByRow[row.id] ?? []);
     const manuallyAdded = currentNewsNames(targetColumn, row.cells[targetColumn.id])
       .filter(name => !previouslyManaged.has(name));
-    const value = newsValue(targetColumn, uniqueNames([...copiedNews, ...manuallyAdded]));
+    const value = newsValue(valueColumn, uniqueNames([...copiedNews, ...manuallyAdded]));
     if (value && !sameValue(row.cells[targetColumn.id], value)) {
       patches.push({ rowId: row.id, value });
     }
   }
 
-  return { targetColumn, dateColumn, patches, managedNewsByRow };
+  return { targetColumn, dateColumn, patches, managedNewsByRow, targetOptions, optionsChanged: !!optionsChanged };
 }
