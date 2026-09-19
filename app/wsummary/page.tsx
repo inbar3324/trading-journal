@@ -17,6 +17,8 @@ import {
   notionTypeToWColType, safeJson, reorderColumns as apiReorderColumns,
 } from '@/lib/weekly-sync-client';
 import { colToSchemaEntry } from '@/lib/weekly-notion';
+import { buildWeeklyNewsPlan } from '@/lib/weekly-news';
+import type { Trade } from '@/lib/types';
 
 const NotebookView = dynamic(() => import('@/components/journal/notebook/NotebookView').then(m => m.NotebookView));
 
@@ -181,6 +183,7 @@ export default function WeeklySummaryPage() {
   const afterQueueRef = useRef<() => Promise<unknown>>(async () => {});
   const pendingPagesRef = useRef(new Map<string, number>());
   const addRowBtnRef = useRef<HTMLTableRowElement>(null);
+  const newsSyncBusyRef = useRef(false);
 
   // Initial load
   useEffect(() => {
@@ -333,6 +336,88 @@ export default function WeeklySummaryPage() {
     const id = setInterval(pullAndReconcile, 15000);
     return () => clearInterval(id);
   }, [store?.notion?.dbId, pullAndReconcile]);
+
+  const syncJournalNews = useCallback(async () => {
+    if (newsSyncBusyRef.current) return;
+    const current = storeRef.current;
+    const config = getNotionConfig();
+    if (!current || !config) return;
+
+    const initialPlan = buildWeeklyNewsPlan(current, []);
+    if (!initialPlan.targetColumn || !initialPlan.dateColumn) return;
+
+    newsSyncBusyRef.current = true;
+    try {
+      const response = await fetch('/api/trades', { headers: notionHeaders(config) });
+      const data = await safeJson<{ trades?: Trade[]; error?: string }>(response, 'Failed to load Journal news');
+      if (!response.ok) throw new Error(data.error ?? `Failed to load Journal news (HTTP ${response.status})`);
+
+      const latest = storeRef.current;
+      if (!latest) return;
+      const plan = buildWeeklyNewsPlan(latest, data.trades ?? []);
+      const targetColumn = plan.targetColumn;
+      if (!targetColumn || plan.patches.length === 0) return;
+
+      const patchesByRow = new Map(plan.patches.map(patch => [patch.rowId, patch.value]));
+      const discoveredOptions = targetColumn.type === 'multi_select'
+        ? plan.patches.flatMap(patch => patch.value.type === 'multi_select' ? patch.value.options : [])
+        : [];
+
+      upd(s => {
+        const known = new Set(targetColumn.options?.map(option => option.name) ?? []);
+        const addedOptions = discoveredOptions.filter(option => {
+          if (known.has(option.name)) return false;
+          known.add(option.name);
+          return true;
+        }).map(option => ({ name: option.name, color: option.color ?? 'default' }));
+        return {
+          ...s,
+          columns: addedOptions.length
+            ? s.columns.map(column => column.id === targetColumn.id
+              ? { ...column, options: [...(column.options ?? []), ...addedOptions] }
+              : column)
+            : s.columns,
+          rows: s.rows.map(row => {
+            const value = patchesByRow.get(row.id);
+            return value ? { ...row, cells: { ...row.cells, [targetColumn.id]: value } } : row;
+          }),
+        };
+      });
+
+      if (latest.notion) {
+        enqueue(async () => {
+          const synced = storeRef.current;
+          if (!synced?.notion) return;
+          for (const patch of plan.patches) {
+            const row = synced.rows.find(candidate => candidate.id === patch.rowId);
+            if (!row?.notionPageId) continue;
+            await apiUpdatePage(row.notionPageId, synced.columns, { [targetColumn.id]: patch.value });
+          }
+        });
+      }
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : 'Failed to sync Journal news');
+      if (storeRef.current?.notion) setSyncStatus('error');
+    } finally {
+      newsSyncBusyRef.current = false;
+    }
+  }, [enqueue]);
+
+  const newsSchemaKey = store?.columns
+    .map(column => `${column.id}:${column.name}:${column.type}`)
+    .join('|') ?? '';
+  const newsStoreReady = store !== null;
+  const newsNotionDbId = store?.notion?.dbId ?? '';
+
+  useEffect(() => {
+    if (!newsStoreReady) return;
+    const initial = window.setTimeout(() => { void syncJournalNews(); }, 0);
+    const interval = window.setInterval(() => { void syncJournalNews(); }, 15_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [newsStoreReady, newsNotionDbId, newsSchemaKey, syncJournalNews]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
