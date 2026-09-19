@@ -17,6 +17,7 @@ export interface WeeklyNewsPlan {
   targetColumn: WColumn | null;
   dateColumn: WColumn | null;
   patches: WeeklyNewsPatch[];
+  managedNewsByRow: Record<string, string[]>;
 }
 
 function columnKey(name: string): string {
@@ -77,15 +78,34 @@ function newsInRange(trades: Trade[], start: string, end: string): string[] {
   return news;
 }
 
-export function buildWeeklyNewsPlan(store: WStore, trades: Trade[]): WeeklyNewsPlan {
+function currentNewsNames(column: WColumn, value: NotionPropValue | undefined): string[] {
+  if (column.type === 'multi_select' && value?.type === 'multi_select') {
+    return value.options.map(option => option.name);
+  }
+  if (column.type === 'text' && value?.type === 'rich_text') {
+    return value.text.split(',').map(name => name.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function uniqueNames(names: string[]): string[] {
+  return [...new Set(names.map(name => name.trim()).filter(Boolean))];
+}
+
+export function buildWeeklyNewsPlan(
+  store: WStore,
+  trades: Trade[],
+  previouslyManagedByRow: Record<string, string[]> = {},
+): WeeklyNewsPlan {
   const targetColumn = store.columns.find(column => columnKey(column.name) === NEWS_COLUMN_KEY) ?? null;
   const dateColumns = store.columns.filter(column => column.type === 'date');
   const dateColumn = dateColumns.find(column => WEEK_DATE_KEYS.has(columnKey(column.name)))
     ?? (dateColumns.length === 1 ? dateColumns[0] : null);
 
-  if (!targetColumn || !dateColumn) return { targetColumn, dateColumn, patches: [] };
+  if (!targetColumn || !dateColumn) return { targetColumn, dateColumn, patches: [], managedNewsByRow: {} };
 
   const patches: WeeklyNewsPatch[] = [];
+  const managedNewsByRow: Record<string, string[]> = {};
   for (const row of store.rows) {
     const period = row.cells[dateColumn.id];
     if (period?.type !== 'date') continue;
@@ -93,11 +113,16 @@ export function buildWeeklyNewsPlan(store: WStore, trades: Trade[]): WeeklyNewsP
     const end = dateKey(period.end) ?? start;
     if (!start || !end) continue;
 
-    const value = newsValue(targetColumn, newsInRange(trades, start, end));
+    const copiedNews = newsInRange(trades, start, end);
+    managedNewsByRow[row.id] = copiedNews;
+    const previouslyManaged = new Set(previouslyManagedByRow[row.id] ?? []);
+    const manuallyAdded = currentNewsNames(targetColumn, row.cells[targetColumn.id])
+      .filter(name => !previouslyManaged.has(name));
+    const value = newsValue(targetColumn, uniqueNames([...copiedNews, ...manuallyAdded]));
     if (value && !sameValue(row.cells[targetColumn.id], value)) {
       patches.push({ rowId: row.id, value });
     }
   }
 
-  return { targetColumn, dateColumn, patches };
+  return { targetColumn, dateColumn, patches, managedNewsByRow };
 }

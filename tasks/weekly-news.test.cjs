@@ -34,7 +34,7 @@ test('copies unique Journal NEWS values into the matching weekly date range', ()
     { date: '2026-09-26', news: ['FOMC'] },
   ];
 
-  const plan = buildWeeklyNewsPlan(store, trades);
+  const plan = buildWeeklyNewsPlan(store, trades, { b: ['FOMC'] });
   assert.equal(plan.patches.length, 2);
   assert.deepEqual(JSON.parse(JSON.stringify(plan.patches[0])), {
     rowId: 'a',
@@ -66,4 +66,19 @@ test('stays inactive until both named NEWS and weekly date columns exist', () =>
   const plan = buildWeeklyNewsPlan(store, []);
   assert.equal(plan.targetColumn, null);
   assert.equal(plan.patches.length, 0);
+});
+
+test('keeps manually added weekly news while refreshing copied Journal news', () => {
+  const store = {
+    columns,
+    rows: [{ id: 'a', cells: { week: date('2026-09-14', '2026-09-18'), news: multi('CPI', 'MANUAL EVENT') } }],
+  };
+  const plan = buildWeeklyNewsPlan(
+    store,
+    [{ date: '2026-09-16', news: ['FOMC'] }],
+    { a: ['CPI'] },
+  );
+
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.patches[0].value)), multi('FOMC', 'MANUAL EVENT'));
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.managedNewsByRow)), { a: ['FOMC'] });
 });

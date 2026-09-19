@@ -23,6 +23,7 @@ import type { Trade } from '@/lib/types';
 const NotebookView = dynamic(() => import('@/components/journal/notebook/NotebookView').then(m => m.NotebookView));
 
 const STORE_KEY = 'tj_wsummary';
+const NEWS_SYNC_KEY = 'tj_wsummary_news_sync_v1';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,23 @@ function emptyStore(): WStore {
 
 function uid(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function readManagedNews(scope: string): Record<string, string[]> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NEWS_SYNC_KEY) ?? '{}') as Record<string, Record<string, string[]>>;
+    return saved[scope] ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function writeManagedNews(scope: string, managedNewsByRow: Record<string, string[]>): void {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NEWS_SYNC_KEY) ?? '{}') as Record<string, Record<string, string[]>>;
+    saved[scope] = managedNewsByRow;
+    localStorage.setItem(NEWS_SYNC_KEY, JSON.stringify(saved));
+  } catch {}
 }
 
 // ── Column header (inline component) ──────────────────────────────────────────
@@ -354,9 +372,12 @@ export default function WeeklySummaryPage() {
 
       const latest = storeRef.current;
       if (!latest) return;
-      const plan = buildWeeklyNewsPlan(latest, data.trades ?? []);
+      const newsScope = latest.notion?.dbId ?? 'local';
+      const plan = buildWeeklyNewsPlan(latest, data.trades ?? [], readManagedNews(newsScope));
       const targetColumn = plan.targetColumn;
-      if (!targetColumn || plan.patches.length === 0) return;
+      if (!targetColumn) return;
+      writeManagedNews(newsScope, plan.managedNewsByRow);
+      if (plan.patches.length === 0) return;
 
       const patchesByRow = new Map(plan.patches.map(patch => [patch.rowId, patch.value]));
       const discoveredOptions = targetColumn.type === 'multi_select'
