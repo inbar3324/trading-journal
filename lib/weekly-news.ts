@@ -2,7 +2,7 @@ import type { NotionColor, NotionPropValue, SelectOption } from './notion-page';
 import type { Trade } from './types';
 import type { WColumn, WStore } from './weekly-types';
 
-const NEWS_COLUMN_KEY = 'NEWSOFTHEWEEK';
+const NEWS_COLUMN_KEYS = new Set(['NEWSOFTHEWEEK', 'NEWSFORTHEWEEK']);
 const WEEK_DATE_KEYS = new Set(['WEEKENDING', 'WEEKDATE', 'WEEK']);
 const NOTION_COLORS = new Set<NotionColor>([
   'default', 'gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red',
@@ -24,6 +24,11 @@ export interface WeeklyNewsPlan {
 
 function columnKey(name: string): string {
   return name.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function isWeeklyNewsColumn(name: string): boolean {
+  const key = columnKey(name);
+  return NEWS_COLUMN_KEYS.has(key) || (key.startsWith('NEWS') && key.includes('WEEK'));
 }
 
 function dateKey(value: string | null | undefined): string | null {
@@ -120,7 +125,7 @@ export function buildWeeklyNewsPlan(
   previouslyManagedByRow: Record<string, string[]> = {},
   journalNewsOptions: { name: string; color?: string }[] = [],
 ): WeeklyNewsPlan {
-  const targetColumn = store.columns.find(column => columnKey(column.name) === NEWS_COLUMN_KEY) ?? null;
+  const targetColumn = store.columns.find(column => isWeeklyNewsColumn(column.name)) ?? null;
   const dateColumns = store.columns.filter(column => column.type === 'date');
   const dateColumn = dateColumns.find(column => WEEK_DATE_KEYS.has(columnKey(column.name)))
     ?? (dateColumns.length === 1 ? dateColumns[0] : null);

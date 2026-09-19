@@ -99,3 +99,19 @@ test('copies every Journal NEWS option into NEWS OF THE WEEK for manual selectio
     { name: 'FOMC', color: 'purple' },
   ]);
 });
+
+test('recognizes the actual NEWS FOR THE WEEK column name', () => {
+  const store = {
+    columns: columns.map(column => column.id === 'news'
+      ? { ...column, name: 'NEWS FOR THE WEEK' }
+      : column),
+    rows: [{ id: 'a', cells: { week: date('2026-09-14', '2026-09-18'), news: multi() } }],
+  };
+  const plan = buildWeeklyNewsPlan(store, [], {}, [{ name: 'FOMC', color: 'purple' }]);
+
+  assert.equal(plan.targetColumn?.name, 'NEWS FOR THE WEEK');
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.targetOptions)), [
+    { name: 'FOMC', color: 'purple' },
+    { name: 'CPI', color: 'red' },
+  ]);
+});
